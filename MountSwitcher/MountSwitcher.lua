@@ -88,31 +88,28 @@ mountButton:SetScript("OnClick", OnMountButton)
 
 -- Function to load the saved data and update the input fields
 local function LoadSavedData()
-    DEFAULT_CHAT_FRAME:AddMessage("Loading saved data...")
     -- Retrieve the data from SavedVariables
     flyingMountInput:SetText(MountSwitcherDB and MountSwitcherDB["FlyingMount"] or "")
     groundMountInput:SetText(MountSwitcherDB and MountSwitcherDB["GroundMount"] or "")
 
-    DEFAULT_CHAT_FRAME:AddMessage("Data loaded:")
-    DEFAULT_CHAT_FRAME:AddMessage("Flying Mount:", flyingMountInput:GetText())
-    DEFAULT_CHAT_FRAME:AddMessage("Ground Mount:", groundMountInput:GetText())
+    DEFAULT_CHAT_FRAME:AddMessage("Mounts loaded:")
+    -- Check if the frame should be shown or hidden
+    if not MountSwitcherDB.ShowFrame then
+        myFrame:Hide()
+    end
 end
 
 local function PerformAction()
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
             CastSpellByName(MountSwitcherDB["FlyingMount"])
-            DEFAULT_CHAT_FRAME:AddMessage("You´re in Krasus' Landing, using flying mount")
         else
             CastSpellByName(MountSwitcherDB["GroundMount"])
-            DEFAULT_CHAT_FRAME:AddMessage("You´re in Dalaran, using ground mount")
         end
     elseif IsFlyableArea() then
         CastSpellByName(MountSwitcherDB["FlyingMount"])
-        DEFAULT_CHAT_FRAME:AddMessage("You can fly here, using fly mount")
     else
         CastSpellByName(MountSwitcherDB["GroundMount"])
-        DEFAULT_CHAT_FRAME:AddMessage("You can not fly here, using ground mount")
     end
 end
 
@@ -126,7 +123,13 @@ local function SlashCommandHandler(msg)
     if msg == "mount" then
         PerformAction()
     elseif msg == "options" then
-        myFrame:SetShown(not myFrame:IsShown())
+        if myFrame:IsShown() then
+            myFrame:Hide()
+            MountSwitcherDB.ShowFrame = false
+        else
+            myFrame:Show()
+            MountSwitcherDB.ShowFrame = true
+        end
     else
         DEFAULT_CHAT_FRAME:AddMessage("Unknown command. Usage: /ms mount, /ms options")
     end
