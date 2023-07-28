@@ -3,8 +3,8 @@
 MountSwitcherDB = MountSwitcherDB or {}
 
 -- Create the frame
-local myFrame = CreateFrame("Frame", "MySimpleAddonFrame", UIParent, "BasicFrameTemplate")
-myFrame:SetSize(200, 200) -- Adjusted the frame size to accommodate the smaller items
+local myFrame = CreateFrame("Frame", "MountSwitcherFrame", UIParent, "BasicFrameTemplate")
+myFrame:SetSize(240, 200) -- Adjusted the frame size to fit the items
 myFrame:SetPoint("CENTER")
 myFrame:SetMovable(true)
 myFrame:EnableMouse(true)
@@ -13,8 +13,13 @@ myFrame:SetScript("OnDragStart", myFrame.StartMoving)
 myFrame:SetScript("OnDragStop", myFrame.StopMovingOrSizing)
 myFrame:SetScript("OnHide", myFrame.StopMovingOrSizing)
 
+-- Addon Title
+local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+title:SetText("MountSwitcher")
+title:SetPoint("TOPLEFT", 5, -5) -- Center the title at the top of the frame
+
 -- Create text inputs and labels
-local yOffset = -40 -- Adjust the vertical offset for each item
+local yOffset = -30 -- Adjust the vertical offset for each item
 
 local flyingMountLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 flyingMountLabel:SetText("Flying Mount Name:")
@@ -22,7 +27,7 @@ flyingMountLabel:SetPoint("TOPLEFT", 20, yOffset)
 
 local flyingMountInput = CreateFrame("EditBox", nil, myFrame, "InputBoxTemplate")
 flyingMountInput:SetAutoFocus(false)
-flyingMountInput:SetSize(150, 20)                                           -- Smaller height for the input
+flyingMountInput:SetSize(200, 20)                                           -- Smaller height for the input
 flyingMountInput:SetPoint("TOPLEFT", flyingMountLabel, "BOTTOMLEFT", 0, -5) -- Align below the label
 
 yOffset = yOffset - 40                                                      -- Increase the offset for the next item
@@ -33,23 +38,26 @@ groundMountLabel:SetPoint("TOPLEFT", 20, yOffset)
 
 local groundMountInput = CreateFrame("EditBox", nil, myFrame, "InputBoxTemplate")
 groundMountInput:SetAutoFocus(false)
-groundMountInput:SetSize(150, 20)                                           -- Smaller height for the input
+groundMountInput:SetSize(200, 20)                                           -- Smaller height for the input
 groundMountInput:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", 0, -5) -- Align below the label
 
-yOffset = yOffset - 20
--- Create the button
+yOffset = yOffset - 30
+
+-- Create the buttons
 local mountButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
 mountButton:SetText("Mount!")
-mountButton:SetSize(100, 30)
-mountButton:SetPoint("TOPLEFT", groundMountInput, "BOTTOMLEFT", 0, -10) -- Position the button below the inputs
+mountButton:SetSize(95, 30)
+mountButton:SetPoint("BOTTOMLEFT", groundMountInput, "BOTTOMLEFT", 0, -35) -- Position the button below the flyingMountInput with a bit of margin
 
--- Create the Save button
 local saveButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
 saveButton:SetText("Save")
-saveButton:SetSize(100, 30)
-saveButton:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 0, -10) -- Position the Save button below the "Mount!" button
--- Increase the offset for the next item
+saveButton:SetSize(95, 30)
+saveButton:SetPoint("LEFT", mountButton, "RIGHT", 5, 0) -- Position the Save button on the right side of the mountButton
 
+-- Small Text Label
+local smallTextLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+smallTextLabel:SetText("Macro: /ms mount")
+smallTextLabel:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 38, -10) -- Center the smallTextLabel below the row of buttons
 
 -- Function to save the input data
 local function SaveData()
