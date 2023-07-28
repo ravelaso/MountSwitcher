@@ -53,7 +53,6 @@ saveButton:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 0, -10) -- Position th
 
 -- Function to save the input data
 local function SaveData()
-    DEFAULT_CHAT_FRAME:AddMessage("Saving data...")
     -- Save the data using SavedVariables
     MountSwitcherDB = MountSwitcherDB or {} -- Create the table if it doesn't exist
     MountSwitcherDB["FlyingMount"] = flyingMountInput:GetText()
@@ -92,7 +91,6 @@ local function LoadSavedData()
     flyingMountInput:SetText(MountSwitcherDB and MountSwitcherDB["FlyingMount"] or "")
     groundMountInput:SetText(MountSwitcherDB and MountSwitcherDB["GroundMount"] or "")
 
-    DEFAULT_CHAT_FRAME:AddMessage("Mounts loaded:")
     -- Check if the frame should be shown or hidden
     if not MountSwitcherDB.ShowFrame then
         myFrame:Hide()
