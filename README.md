@@ -5,6 +5,13 @@ Switches your mounts depending on flying capabilities (fixes dalaran flying zone
 
 ## How to
 
+### 0 - Install the addon.
+Copy the folder **MountSwitcher** 
+
+Paste under your addons folder:
+```
+\World of Warcraft\_classic_\Interface\AddOns
+```
 ### 1 - Open the UI
 ```
 /ms options
