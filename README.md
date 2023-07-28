@@ -3,6 +3,8 @@ World Of Warcraft - WOTLK Classic Addon
 
 Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 
+![mountswitcher](https://github.com/ravelaso/MountSwitcher/assets/18076680/394249df-5102-40a5-a687-41c0921f0f09)
+
 ## How to
 
 ### 0 - Install the addon.
