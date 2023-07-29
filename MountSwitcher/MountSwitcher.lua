@@ -1,10 +1,11 @@
 -- MySimpleAddon.lua
 -- Declare MountSwitcherDB as a global variable
 MountSwitcherDB = MountSwitcherDB or {}
+MountSwitcherDB.OwnedMounts = {}
 
 -- Create the frame
 local myFrame = CreateFrame("Frame", "MountSwitcherFrame", UIParent, "BasicFrameTemplate")
-myFrame:SetSize(240, 200) -- Adjusted the frame size to fit the items
+myFrame:SetSize(260, 220) -- Adjusted the frame size to fit the items
 myFrame:SetPoint("CENTER")
 myFrame:SetMovable(true)
 myFrame:EnableMouse(true)
@@ -18,40 +19,36 @@ local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetText("MountSwitcher")
 title:SetPoint("TOPLEFT", 5, -5) -- Center the title at the top of the frame
 
--- Create text inputs and labels
-local yOffset = -30 -- Adjust the vertical offset for each item
+-- Create dropdown menus and labels
+local yOffset = -40 -- Adjust the vertical offset for each item
 
 local flyingMountLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-flyingMountLabel:SetText("Flying Mount Name:")
-flyingMountLabel:SetPoint("TOPLEFT", 20, yOffset)
+flyingMountLabel:SetText("Flying Mount:")
+flyingMountLabel:SetPoint("TOPLEFT", 30, yOffset)
 
-local flyingMountInput = CreateFrame("EditBox", nil, myFrame, "InputBoxTemplate")
-flyingMountInput:SetAutoFocus(false)
-flyingMountInput:SetSize(200, 20)                                           -- Smaller height for the input
-flyingMountInput:SetPoint("TOPLEFT", flyingMountLabel, "BOTTOMLEFT", 0, -5) -- Align below the label
+local flyingMountDropdown = CreateFrame("Frame", "FlyingMountDropdown", myFrame, "UIDropDownMenuTemplate")
+flyingMountDropdown:SetPoint("TOPLEFT", flyingMountLabel, "BOTTOMLEFT", -20, -5)
+UIDropDownMenu_SetWidth(flyingMountDropdown, 180)
 
-yOffset = yOffset - 40                                                      -- Increase the offset for the next item
+yOffset = yOffset - 60 -- Increase the offset for the next item
 
 local groundMountLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-groundMountLabel:SetText("Ground Mount Name:")
-groundMountLabel:SetPoint("TOPLEFT", 20, yOffset)
+groundMountLabel:SetText("Ground Mount:")
+groundMountLabel:SetPoint("TOPLEFT", 30, yOffset)
 
-local groundMountInput = CreateFrame("EditBox", nil, myFrame, "InputBoxTemplate")
-groundMountInput:SetAutoFocus(false)
-groundMountInput:SetSize(200, 20)                                           -- Smaller height for the input
-groundMountInput:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", 0, -5) -- Align below the label
-
-yOffset = yOffset - 30
+local groundMountDropdown = CreateFrame("Frame", "GroundMountDropdown", myFrame, "UIDropDownMenuTemplate")
+groundMountDropdown:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", -20, -5)
+UIDropDownMenu_SetWidth(groundMountDropdown, 180)
 
 -- Create the buttons
 local mountButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
-mountButton:SetText("Mount!")
-mountButton:SetSize(95, 30)
-mountButton:SetPoint("BOTTOMLEFT", groundMountInput, "BOTTOMLEFT", 0, -35) -- Position the button below the flyingMountInput with a bit of margin
+mountButton:SetText("Mount")
+mountButton:SetSize(90, 30)
+mountButton:SetPoint("BOTTOMLEFT", groundMountDropdown, "BOTTOMLEFT", 22, -40) -- Position the button below the ground mount dropdown
 
 local saveButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
 saveButton:SetText("Save")
-saveButton:SetSize(95, 30)
+saveButton:SetSize(90, 30)
 saveButton:SetPoint("LEFT", mountButton, "RIGHT", 5, 0) -- Position the Save button on the right side of the mountButton
 
 -- Small Text Label
@@ -63,10 +60,21 @@ smallTextLabel:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 38, -10) -- Center
 local function SaveData()
     -- Save the data using SavedVariables
     MountSwitcherDB = MountSwitcherDB or {} -- Create the table if it doesn't exist
-    MountSwitcherDB["FlyingMount"] = flyingMountInput:GetText()
-    MountSwitcherDB["GroundMount"] = groundMountInput:GetText()
+    MountSwitcherDB["FlyingMount"] = UIDropDownMenu_GetText(flyingMountDropdown)
+    MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetText(groundMountDropdown)
 
     DEFAULT_CHAT_FRAME:AddMessage("Data saved!")
+end
+
+-- Function to get all mounts that the player owns
+local function GetOwnedMounts()
+    MountSwitcherDB = MountSwitcherDB or {}
+    MountSwitcherDB.OwnedMounts = {}
+    local numMounts = GetNumCompanions("MOUNT")
+    for i = 1, numMounts do
+        local creatureID,creatureName = GetCompanionInfo("MOUNT", i)
+        MountSwitcherDB.OwnedMounts[creatureID] = creatureName
+    end
 end
 
 -- Set the OnClick script of the Save button to our SaveData function
@@ -77,27 +85,60 @@ local function OnMountButton()
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
             CastSpellByName(MountSwitcherDB["FlyingMount"])
-            DEFAULT_CHAT_FRAME:AddMessage("You´re in Krasus' Landing, using flying mount")
         else
             CastSpellByName(MountSwitcherDB["GroundMount"])
-            DEFAULT_CHAT_FRAME:AddMessage("You´re in Dalaran, using ground mount")
         end
     elseif IsFlyableArea() then
         CastSpellByName(MountSwitcherDB["FlyingMount"])
-        DEFAULT_CHAT_FRAME:AddMessage("You can fly here, using fly mount")
     else
         CastSpellByName(MountSwitcherDB["GroundMount"])
-        DEFAULT_CHAT_FRAME:AddMessage("You can not fly here, using ground mount")
     end
 end
 -- Set the OnClick script of the button to our function
 mountButton:SetScript("OnClick", OnMountButton)
 
--- Function to load the saved data and update the input fields
+-- Function to populate the dropdown menus with owned mounts
+local function PopulateDropdownMenus()
+    UIDropDownMenu_Initialize(flyingMountDropdown, function(self, level)
+        local ownedMounts = MountSwitcherDB.OwnedMounts
+        if ownedMounts then
+            for creatureID, creatureName in pairs(ownedMounts) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = creatureName
+                info.value = creatureID
+                info.func = function(self)
+                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value)
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end
+    end)
+
+    UIDropDownMenu_Initialize(groundMountDropdown, function(self, level)
+        local ownedMounts = MountSwitcherDB.OwnedMounts
+        if ownedMounts then
+            for creatureID, creatureName in pairs(ownedMounts) do
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = creatureName
+                info.value = creatureID
+                info.func = function(self)
+                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value)
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end
+    end)
+end
+
+-- Function to load the saved data and update the dropdown menus
 local function LoadSavedData()
     -- Retrieve the data from SavedVariables
-    flyingMountInput:SetText(MountSwitcherDB and MountSwitcherDB["FlyingMount"] or "")
-    groundMountInput:SetText(MountSwitcherDB and MountSwitcherDB["GroundMount"] or "")
+    local flyingMount = MountSwitcherDB and MountSwitcherDB["FlyingMount"] or ""
+    local groundMount = MountSwitcherDB and MountSwitcherDB["GroundMount"] or ""
+
+    -- Update the dropdown menus
+    UIDropDownMenu_SetText(flyingMountDropdown, flyingMount)
+    UIDropDownMenu_SetText(groundMountDropdown, groundMount)
 
     -- Check if the frame should be shown or hidden
     if not MountSwitcherDB.ShowFrame then
@@ -105,29 +146,21 @@ local function LoadSavedData()
     end
 end
 
-local function PerformAction()
-    if (GetZoneText() == "Dalaran") then
-        if (GetSubZoneText() == "Krasus' Landing") then
-            CastSpellByName(MountSwitcherDB["FlyingMount"])
-        else
-            CastSpellByName(MountSwitcherDB["GroundMount"])
-        end
-    elseif IsFlyableArea() then
-        CastSpellByName(MountSwitcherDB["FlyingMount"])
-    else
-        CastSpellByName(MountSwitcherDB["GroundMount"])
-    end
-end
-
 -- Register the event to load saved data when the player logs in or reloads the UI
 myFrame:RegisterEvent("PLAYER_LOGIN")
 myFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-myFrame:SetScript("OnEvent", LoadSavedData)
+myFrame:SetScript("OnEvent", function(self, event)
+    if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
+        GetOwnedMounts()
+        LoadSavedData() -- Load saved data from MountSwitcherDB
+        PopulateDropdownMenus() -- Populate dropdown menus with owned mounts
+    end
+end)
 
 -- Slash command handler
 local function SlashCommandHandler(msg)
     if msg == "mount" then
-        PerformAction()
+        OnMountButton()
     elseif msg == "options" then
         if myFrame:IsShown() then
             myFrame:Hide()
@@ -140,6 +173,7 @@ local function SlashCommandHandler(msg)
         DEFAULT_CHAT_FRAME:AddMessage("Unknown command. Usage: /ms mount, /ms options")
     end
 end
+
 -- Register slash command /ms to show the frame
 SLASH_MountSwitcher1 = "/ms"
 SlashCmdList["MountSwitcher"] = SlashCommandHandler

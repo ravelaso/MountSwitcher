@@ -1,6 +1,6 @@
-## Interface: 100105
+## Interface: 30402
 ## Title: Mount Switcher
 ## Author: @Ravelaso: Buenclima-Golemagg
-## Version: 1.0
+## Version: 1.2
 ## SavedVariablesPerCharacter: MountSwitcherDB
 MountSwitcher.lua
