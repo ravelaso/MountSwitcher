@@ -1,5 +1,6 @@
 ## Interface: 30402
 ## Title: Mount Switcher
+## Notes: Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 ## Author: @Ravelaso: Buenclima-Golemagg
 ## Version: 1.2
 ## SavedVariablesPerCharacter: MountSwitcherDB
