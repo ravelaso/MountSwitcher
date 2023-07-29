@@ -1,4 +1,4 @@
--- MySimpleAddon.lua
+-- MountSwitcher.lua
 -- Declare MountSwitcherDB as a global variable
 MountSwitcherDB = MountSwitcherDB or {}
 MountSwitcherDB.OwnedMounts = {}
