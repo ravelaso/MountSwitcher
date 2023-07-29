@@ -13,7 +13,7 @@ myFrame:RegisterForDrag("LeftButton")
 myFrame:SetScript("OnDragStart", myFrame.StartMoving)
 myFrame:SetScript("OnDragStop", myFrame.StopMovingOrSizing)
 myFrame:SetScript("OnHide", myFrame.StopMovingOrSizing)
-
+myFrame:SetShown(false)
 -- Addon Title
 local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetText("MountSwitcher")
@@ -72,8 +72,15 @@ local function GetOwnedMounts()
     MountSwitcherDB.OwnedMounts = {}
     local numMounts = GetNumCompanions("MOUNT")
     for i = 1, numMounts do
-        local creatureID,creatureName = GetCompanionInfo("MOUNT", i)
-        MountSwitcherDB.OwnedMounts[creatureID] = creatureName
+        local creatureID,creatureName,creatureSpellID = GetCompanionInfo("MOUNT", i)
+        if creatureName == "Thalassian Warhorse"
+        or creatureName == "Thalassian Charger"
+        or creatureName == "Warhorse"
+        or creatureName =="Charger" then
+            MountSwitcherDB.OwnedMounts[creatureSpellID] = GetSpellInfo(creatureSpellID)
+        else
+            MountSwitcherDB.OwnedMounts[creatureID] = creatureName
+        end
     end
 end
 
@@ -82,16 +89,18 @@ saveButton:SetScript("OnClick", SaveData)
 
 -- Function to be executed when the button is clicked
 local function OnMountButton()
+    local fly = MountSwitcherDB["FlyingMount"]
+    local ground = MountSwitcherDB["GroundMount"]
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
-            CastSpellByName(MountSwitcherDB["FlyingMount"])
+            CastSpellByName(fly)
         else
-            CastSpellByName(MountSwitcherDB["GroundMount"])
+            CastSpellByName(ground)
         end
     elseif IsFlyableArea() then
-        CastSpellByName(MountSwitcherDB["FlyingMount"])
+        CastSpellByName(fly)
     else
-        CastSpellByName(MountSwitcherDB["GroundMount"])
+        CastSpellByName(ground)
     end
 end
 -- Set the OnClick script of the button to our function
