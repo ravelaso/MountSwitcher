@@ -76,7 +76,8 @@ local function GetOwnedMounts()
         if creatureName == "Thalassian Warhorse"
         or creatureName == "Thalassian Charger"
         or creatureName == "Warhorse"
-        or creatureName =="Charger" then
+        or creatureName == "Charger"
+        or creatureName == "Bronze Drake Mount" then -- Checks
             MountSwitcherDB.OwnedMounts[creatureSpellID] = GetSpellInfo(creatureSpellID)
         else
             MountSwitcherDB.OwnedMounts[creatureID] = creatureName
