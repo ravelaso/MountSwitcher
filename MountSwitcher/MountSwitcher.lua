@@ -2,6 +2,7 @@
 -- Declare MountSwitcherDB as a global variable
 MountSwitcherDB = MountSwitcherDB or {}
 MountSwitcherDB.OwnedMounts = {}
+local IsDebug = false
 
 -- Create the frame
 local myFrame = CreateFrame("Frame", "MountSwitcherFrame", UIParent, "BasicFrameTemplate")
@@ -14,6 +15,7 @@ myFrame:SetScript("OnDragStart", myFrame.StartMoving)
 myFrame:SetScript("OnDragStop", myFrame.StopMovingOrSizing)
 myFrame:SetScript("OnHide", myFrame.StopMovingOrSizing)
 myFrame:SetShown(false)
+
 -- Addon Title
 local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetText("MountSwitcher")
@@ -40,6 +42,7 @@ local groundMountDropdown = CreateFrame("Frame", "GroundMountDropdown", myFrame,
 groundMountDropdown:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", -20, -5)
 UIDropDownMenu_SetWidth(groundMountDropdown, 180)
 
+
 -- Create the buttons
 local mountButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
 mountButton:SetText("Mount")
@@ -60,10 +63,23 @@ smallTextLabel:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 38, -10) -- Center
 local function SaveData()
     -- Save the data using SavedVariables
     MountSwitcherDB = MountSwitcherDB or {} -- Create the table if it doesn't exist
-    MountSwitcherDB["FlyingMount"] = UIDropDownMenu_GetText(flyingMountDropdown)
-    MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetText(groundMountDropdown)
 
-    DEFAULT_CHAT_FRAME:AddMessage("Data saved!")
+    local flyingMountIndex = UIDropDownMenu_GetSelectedID(flyingMountDropdown)
+    local groundMountIndex = UIDropDownMenu_GetSelectedID(groundMountDropdown)
+
+    if flyingMountIndex then
+        MountSwitcherDB["FlyingMount"] = UIDropDownMenu_GetSelectedValue(flyingMountDropdown)
+    end
+
+    if groundMountIndex then
+        MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetSelectedValue(groundMountDropdown)
+    end
+
+    DEFAULT_CHAT_FRAME:AddMessage("Mounts saved! :)")
+    if IsDebug then
+        print("Saved Fly ID - ", MountSwitcherDB["FlyingMount"])
+        print("Saved Ground ID - ", MountSwitcherDB["GroundMount"])
+    end
 end
 
 -- Function to get all mounts that the player owns
@@ -72,14 +88,11 @@ local function GetOwnedMounts()
     MountSwitcherDB.OwnedMounts = {}
     local numMounts = GetNumCompanions("MOUNT")
     for i = 1, numMounts do
-        local creatureID,creatureName,creatureSpellID = GetCompanionInfo("MOUNT", i)
-        if creatureName == "Thalassian Warhorse"
-        or creatureName == "Thalassian Charger"
-        or creatureName == "Warhorse"
-        or creatureName =="Charger" then
-            MountSwitcherDB.OwnedMounts[creatureSpellID] = GetSpellInfo(creatureSpellID)
-        else
-            MountSwitcherDB.OwnedMounts[creatureID] = creatureName
+        local _, _, creatureSpellID = GetCompanionInfo("MOUNT", i)
+        local name, _, icon = GetSpellInfo(creatureSpellID)
+        MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+        if IsDebug then
+            print("Found OwnedMount - ", creatureSpellID, name, icon)
         end
     end
 end
@@ -91,18 +104,35 @@ saveButton:SetScript("OnClick", SaveData)
 local function OnMountButton()
     local fly = MountSwitcherDB["FlyingMount"]
     local ground = MountSwitcherDB["GroundMount"]
+
+    local flySpellName = GetSpellInfo(fly)
+    local groundSpellName = GetSpellInfo(ground)
+
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
-            CastSpellByName(fly)
+            if IsDebug then
+                print("Casting: ", flySpellName)
+            end
+            CastSpellByName(flySpellName)
         else
-            CastSpellByName(ground)
+            if IsDebug then
+                print("Casting: ", groundSpellName)
+            end
+            CastSpellByName(groundSpellName)
         end
     elseif IsFlyableArea() then
-        CastSpellByName(fly)
+        if IsDebug then
+            print("Casting: ", flySpellName)
+        end
+        CastSpellByName(flySpellName)
     else
-        CastSpellByName(ground)
+        if IsDebug then
+            print("Casting: ", groundSpellName)
+        end
+        CastSpellByName(groundSpellName)
     end
 end
+
 -- Set the OnClick script of the button to our function
 mountButton:SetScript("OnClick", OnMountButton)
 
@@ -111,12 +141,14 @@ local function PopulateDropdownMenus()
     UIDropDownMenu_Initialize(flyingMountDropdown, function(self, level)
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
-            for creatureID, creatureName in pairs(ownedMounts) do
+            for creatureSpellID, mountData in pairs(ownedMounts) do
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = creatureName
-                info.value = creatureID
+                info.text = mountData.name
+                info.value = creatureSpellID -- No need to convert to string here
+                info.icon = mountData.icon
                 info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value)
+                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value) -- Set value, not ID
+                    UIDropDownMenu_SetText(flyingMountDropdown, self:GetText())
                 end
                 UIDropDownMenu_AddButton(info, level)
             end
@@ -126,34 +158,49 @@ local function PopulateDropdownMenus()
     UIDropDownMenu_Initialize(groundMountDropdown, function(self, level)
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
-            for creatureID, creatureName in pairs(ownedMounts) do
+            for creatureSpellID, mountData in pairs(ownedMounts) do
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = creatureName
-                info.value = creatureID
+                info.text = mountData.name
+                info.value = creatureSpellID -- No need to convert to string here
+                info.icon = mountData.icon
                 info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value)
+                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value) -- Set value, not ID
+                    UIDropDownMenu_SetText(groundMountDropdown, self:GetText())
                 end
                 UIDropDownMenu_AddButton(info, level)
             end
         end
     end)
 end
-
 -- Function to load the saved data and update the dropdown menus
 local function LoadSavedData()
     -- Retrieve the data from SavedVariables
-    local flyingMount = MountSwitcherDB and MountSwitcherDB["FlyingMount"] or ""
-    local groundMount = MountSwitcherDB and MountSwitcherDB["GroundMount"] or ""
+    local flyingMount = MountSwitcherDB and MountSwitcherDB["FlyingMount"] or nil
+    local groundMount = MountSwitcherDB and MountSwitcherDB["GroundMount"] or nil
 
-    -- Update the dropdown menus
-    UIDropDownMenu_SetText(flyingMountDropdown, flyingMount)
-    UIDropDownMenu_SetText(groundMountDropdown, groundMount)
+    -- Update the dropdown menus and select the correct items
+    if flyingMount then
+        UIDropDownMenu_SetSelectedValue(flyingMountDropdown, flyingMount)
+        UIDropDownMenu_SetText(flyingMountDropdown, GetSpellInfo(flyingMount))
+    end
 
-    -- Check if the frame should be shown or hidden
-    if not MountSwitcherDB.ShowFrame then
-        myFrame:Hide()
+    if groundMount then
+        UIDropDownMenu_SetSelectedValue(groundMountDropdown, groundMount)
+        UIDropDownMenu_SetText(groundMountDropdown, GetSpellInfo(groundMount))
+    end
+
+    if IsDebug then
+        print("Loaded Value - MountSwitcherDB - FlyingMount: ", flyingMount)
+        print("Loaded Value - MountSwitcherDB - GroundMount: ", groundMount)
+        if flyingMount then
+            print("DropDown Set Value - ", GetSpellInfo(flyingMount))
+        end
+        if groundMount then
+            print("DropDown Set Value - ", GetSpellInfo(groundMount))
+        end
     end
 end
+
 
 -- Register the event to load saved data when the player logs in or reloads the UI
 myFrame:RegisterEvent("PLAYER_LOGIN")
@@ -161,22 +208,30 @@ myFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 myFrame:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         GetOwnedMounts()
-        LoadSavedData() -- Load saved data from MountSwitcherDB
+        LoadSavedData()         -- Load saved data from MountSwitcherDB
         PopulateDropdownMenus() -- Populate dropdown menus with owned mounts
     end
 end)
 
 -- Slash command handler
 local function SlashCommandHandler(msg)
+    if msg == "debug" then -- Set Debug Mode -- For printing log
+        if IsDebug then
+            IsDebug = false
+            print("Debug mode Off")
+        else
+            IsDebug = true
+            print("Debug mode On")
+            GetOwnedMounts()
+        end
+    end
     if msg == "mount" then
         OnMountButton()
     elseif msg == "options" then
         if myFrame:IsShown() then
             myFrame:Hide()
-            MountSwitcherDB.ShowFrame = false
         else
             myFrame:Show()
-            MountSwitcherDB.ShowFrame = true
         end
     else
         DEFAULT_CHAT_FRAME:AddMessage("Unknown command. Usage: /ms mount, /ms options")
