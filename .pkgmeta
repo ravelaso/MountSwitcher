@@ -1,2 +1,4 @@
-package-as: MountSwitcher
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
 
