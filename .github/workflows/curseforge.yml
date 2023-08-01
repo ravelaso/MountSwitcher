@@ -1,0 +1,23 @@
+name: CurseForge Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    types:
+      - closed
+    branches: ["main"]
+
+jobs:
+  if_merged:
+    if: github.event.pull_request.merged == true || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+     - name: Checkout repository
+       uses: actions/checkout@v3
+     - name: Create Package
+       uses: BigWigsMods/packager@master
+         
