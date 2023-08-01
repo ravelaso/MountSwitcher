@@ -15,6 +15,7 @@ myFrame:SetScript("OnDragStart", myFrame.StartMoving)
 myFrame:SetScript("OnDragStop", myFrame.StopMovingOrSizing)
 myFrame:SetScript("OnHide", myFrame.StopMovingOrSizing)
 myFrame:SetShown(false)
+
 -- Addon Title
 local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 title:SetText("MountSwitcher")
@@ -74,7 +75,7 @@ local function SaveData()
         MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetSelectedValue(groundMountDropdown)
     end
 
-    DEFAULT_CHAT_FRAME:AddMessage("Data saved!")
+    DEFAULT_CHAT_FRAME:AddMessage("Mounts saved! :)")
     if IsDebug then
         print("Saved Fly ID - ", MountSwitcherDB["FlyingMount"])
         print("Saved Ground ID - ", MountSwitcherDB["GroundMount"])
@@ -171,28 +172,35 @@ local function PopulateDropdownMenus()
         end
     end)
 end
-
-
-
 -- Function to load the saved data and update the dropdown menus
 local function LoadSavedData()
     -- Retrieve the data from SavedVariables
-    local flyingMount = MountSwitcherDB and MountSwitcherDB["FlyingMount"] or ""
-    local groundMount = MountSwitcherDB and MountSwitcherDB["GroundMount"] or ""
-    -- Update the dropdown menus
-    UIDropDownMenu_SetText(flyingMountDropdown, GetSpellInfo(flyingMount))
-    UIDropDownMenu_SetText(groundMountDropdown, GetSpellInfo(groundMount))
+    local flyingMount = MountSwitcherDB and MountSwitcherDB["FlyingMount"] or nil
+    local groundMount = MountSwitcherDB and MountSwitcherDB["GroundMount"] or nil
+
+    -- Update the dropdown menus and select the correct items
+    if flyingMount then
+        UIDropDownMenu_SetSelectedValue(flyingMountDropdown, flyingMount)
+        UIDropDownMenu_SetText(flyingMountDropdown, GetSpellInfo(flyingMount))
+    end
+
+    if groundMount then
+        UIDropDownMenu_SetSelectedValue(groundMountDropdown, groundMount)
+        UIDropDownMenu_SetText(groundMountDropdown, GetSpellInfo(groundMount))
+    end
+
     if IsDebug then
         print("Loaded Value - MountSwitcherDB - FlyingMount: ", flyingMount)
         print("Loaded Value - MountSwitcherDB - GroundMount: ", groundMount)
-        print("DropDown Set Value - ", GetSpellInfo(flyingMount))
-        print("DropDown Set Value - ", GetSpellInfo(groundMount))
-    end
-    -- Check if the frame should be shown or hidden
-    if not MountSwitcherDB.ShowFrame then
-        myFrame:Hide()
+        if flyingMount then
+            print("DropDown Set Value - ", GetSpellInfo(flyingMount))
+        end
+        if groundMount then
+            print("DropDown Set Value - ", GetSpellInfo(groundMount))
+        end
     end
 end
+
 
 -- Register the event to load saved data when the player logs in or reloads the UI
 myFrame:RegisterEvent("PLAYER_LOGIN")
@@ -222,10 +230,8 @@ local function SlashCommandHandler(msg)
     elseif msg == "options" then
         if myFrame:IsShown() then
             myFrame:Hide()
-            MountSwitcherDB.ShowFrame = false
         else
             myFrame:Show()
-            MountSwitcherDB.ShowFrame = true
         end
     else
         DEFAULT_CHAT_FRAME:AddMessage("Unknown command. Usage: /ms mount, /ms options")
