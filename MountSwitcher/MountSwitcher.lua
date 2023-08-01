@@ -62,13 +62,22 @@ smallTextLabel:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 38, -10) -- Center
 local function SaveData()
     -- Save the data using SavedVariables
     MountSwitcherDB = MountSwitcherDB or {} -- Create the table if it doesn't exist
-    MountSwitcherDB["FlyingMount"] = UIDropDownMenu_GetValue(flyingMountDropdown)
-    MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetValue(groundMountDropdown)
+
+    local flyingMountIndex = UIDropDownMenu_GetSelectedID(flyingMountDropdown)
+    local groundMountIndex = UIDropDownMenu_GetSelectedID(groundMountDropdown)
+
+    if flyingMountIndex then
+        MountSwitcherDB["FlyingMount"] = UIDropDownMenu_GetSelectedValue(flyingMountDropdown)
+    end
+
+    if groundMountIndex then
+        MountSwitcherDB["GroundMount"] = UIDropDownMenu_GetSelectedValue(groundMountDropdown)
+    end
 
     DEFAULT_CHAT_FRAME:AddMessage("Data saved!")
     if IsDebug then
-        print("Saved Fly ID - ",MountSwitcherDB["FlyingMount"])
-        print("Saved Ground ID - ",MountSwitcherDB["GroundMount"])
+        print("Saved Fly ID - ", MountSwitcherDB["FlyingMount"])
+        print("Saved Ground ID - ", MountSwitcherDB["GroundMount"])
     end
 end
 
@@ -95,30 +104,34 @@ local function OnMountButton()
     local fly = MountSwitcherDB["FlyingMount"]
     local ground = MountSwitcherDB["GroundMount"]
 
+    local flySpellName = GetSpellInfo(fly)
+    local groundSpellName = GetSpellInfo(ground)
+
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
             if IsDebug then
-                print("Casting: ", fly)
+                print("Casting: ", flySpellName)
             end
-            CastSpellByName(GetSpellInfo(fly))
+            CastSpellByName(flySpellName)
         else
             if IsDebug then
-                print("Casting: ", ground)
+                print("Casting: ", groundSpellName)
             end
-            CastSpellByName(ground)
+            CastSpellByName(groundSpellName)
         end
     elseif IsFlyableArea() then
         if IsDebug then
-            print("Casting: ", fly)
+            print("Casting: ", flySpellName)
         end
-        CastSpellByName(GetSpellInfo(fly))
+        CastSpellByName(flySpellName)
     else
         if IsDebug then
-            print("Casting: ", ground)
+            print("Casting: ", groundSpellName)
         end
-        CastSpellByName(GetSpellInfo(ground))
+        CastSpellByName(groundSpellName)
     end
 end
+
 -- Set the OnClick script of the button to our function
 mountButton:SetScript("OnClick", OnMountButton)
 
@@ -127,14 +140,14 @@ local function PopulateDropdownMenus()
     UIDropDownMenu_Initialize(flyingMountDropdown, function(self, level)
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
-            for creatureSpellID, name, icon in (ownedMounts) do
+            for creatureSpellID, mountData in pairs(ownedMounts) do
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = name
-                info.value = creatureSpellID
-                info.icon = icon
+                info.text = mountData.name
+                info.value = creatureSpellID -- No need to convert to string here
+                info.icon = mountData.icon
                 info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value)
-                    UIDropDownMenu_SetText(flyingMountDropdown, self.text)
+                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value) -- Set value, not ID
+                    UIDropDownMenu_SetText(flyingMountDropdown, self:GetText())
                 end
                 UIDropDownMenu_AddButton(info, level)
             end
@@ -144,20 +157,22 @@ local function PopulateDropdownMenus()
     UIDropDownMenu_Initialize(groundMountDropdown, function(self, level)
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
-            for creatureSpellID, name, icon in (ownedMounts) do
+            for creatureSpellID, mountData in pairs(ownedMounts) do
                 local info = UIDropDownMenu_CreateInfo()
-                info.text = name
-                info.value = creatureSpellID
-                info.icon = icon
+                info.text = mountData.name
+                info.value = creatureSpellID -- No need to convert to string here
+                info.icon = mountData.icon
                 info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value)
-                    UIDropDownMenu_SetText(groundMountDropdown, self.text)
+                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value) -- Set value, not ID
+                    UIDropDownMenu_SetText(groundMountDropdown, self:GetText())
                 end
                 UIDropDownMenu_AddButton(info, level)
             end
         end
     end)
 end
+
+
 
 -- Function to load the saved data and update the dropdown menus
 local function LoadSavedData()
