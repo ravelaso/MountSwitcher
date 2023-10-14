@@ -86,11 +86,12 @@ end
 local function GetOwnedMounts()
     MountSwitcherDB = MountSwitcherDB or {}
     MountSwitcherDB.OwnedMounts = {}
-    local numMounts = GetNumCompanions("MOUNT")
-    for i = 1, numMounts do
-        local _, _, creatureSpellID = GetCompanionInfo("MOUNT", i)
-        local name, _, icon = GetSpellInfo(creatureSpellID)
-        MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+    local mountIDs = C_MountJournal.GetMountIDs()
+    for i = 1, #mountIDs, 1 do
+        local name, creatureSpellID, icon, _,_,_,_,_,_,_, isCollected = C_MountJournal.GetMountInfoByID(mountIDs[i])
+        if (isCollected) then
+            MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+        end
         if IsDebug then
             print("Found OwnedMount - ", creatureSpellID, name, icon)
         end
@@ -200,7 +201,6 @@ local function LoadSavedData()
         end
     end
 end
-
 
 -- Register the event to load saved data when the player logs in or reloads the UI
 myFrame:RegisterEvent("PLAYER_LOGIN")
