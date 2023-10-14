@@ -2,7 +2,7 @@
 ## Title: Mount Switcher
 ## Notes: Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 ## Author: @Ravelaso: Buenclima-Golemagg
-## Version: 1.2.3
+## Version: 1.2.4
 ## X-Curse-Project-ID: 895976
 ## SavedVariablesPerCharacter: MountSwitcherDB
 MountSwitcher.lua

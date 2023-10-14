@@ -86,11 +86,15 @@ end
 local function GetOwnedMounts()
     MountSwitcherDB = MountSwitcherDB or {}
     MountSwitcherDB.OwnedMounts = {}
+    local playerFaction = UnitFactionGroup("player")    
     local mountIDs = C_MountJournal.GetMountIDs()
-    for i = 1, #mountIDs, 1 do
-        local name, creatureSpellID, icon, _,_,_,_,_,_,_, isCollected = C_MountJournal.GetMountInfoByID(mountIDs[i])
-        if (isCollected) then
-            MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+    for i = 1, #mountIDs do
+        local name, creatureSpellID, icon, _, _, _, _, _, faction, _, isCollected = C_MountJournal.GetMountInfoByID(mountIDs[i])
+
+        if isCollected then
+            if faction == nil or (playerFaction == "Horde" and faction == 0) or (playerFaction == "Alliance" and faction == 1) then
+                MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+            end
         end
         if IsDebug then
             print("Found OwnedMount - ", creatureSpellID, name, icon)
