@@ -90,17 +90,21 @@ local function GetOwnedMounts()
     local mountIDs = C_MountJournal.GetMountIDs()
     for i = 1, #mountIDs do
         local name, creatureSpellID, icon, _, _, _, _, _, faction, _, isCollected = C_MountJournal.GetMountInfoByID(mountIDs[i])
-
+    
         if isCollected then
+           
+            local extraInfo = {C_MountJournal.GetMountInfoExtraByID(mountIDs[i])}
+            local mTypeID = extraInfo[5] -- Extract the mount type ID from the Extra Info table
             if faction == nil or (playerFaction == "Horde" and faction == 0) or (playerFaction == "Alliance" and faction == 1) then
-                MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon }
+                MountSwitcherDB.OwnedMounts[creatureSpellID] = { name = name, icon = icon, mountTypeID = mTypeID } -- Include mount type ID in stored data
             end
         end
         if IsDebug then
-            print("Found OwnedMount - ", creatureSpellID, name, icon)
+            print("Found OwnedMount - ", creatureSpellID, name, icon, "Mount Type ID:", mTypeID) -- Print mount type ID for debugging
         end
     end
 end
+
 
 -- Set the OnClick script of the Save button to our SaveData function
 saveButton:SetScript("OnClick", SaveData)
@@ -113,6 +117,7 @@ local function OnMountButton()
     local flySpellName = GetSpellInfo(fly)
     local groundSpellName = GetSpellInfo(ground)
 
+    -- Attempt to cast the flying mount spell
     if (GetZoneText() == "Dalaran") then
         if (GetSubZoneText() == "Krasus' Landing") then
             if IsDebug then
@@ -136,6 +141,10 @@ local function OnMountButton()
         end
         CastSpellByName(groundSpellName)
     end
+    
+    -- Fail-Over
+    CastSpellByName(groundSpellName)
+
 end
 
 -- Set the OnClick script of the button to our function
@@ -147,15 +156,17 @@ local function PopulateDropdownMenus()
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
             for creatureSpellID, mountData in pairs(ownedMounts) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = mountData.name
-                info.value = creatureSpellID -- No need to convert to string here
-                info.icon = mountData.icon
-                info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value) -- Set value, not ID
-                    UIDropDownMenu_SetText(flyingMountDropdown, self:GetText())
+                if mountData.mountTypeID == 248 then -- Check if mount type ID is 248 (flying mount)
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = mountData.name
+                    info.value = creatureSpellID
+                    info.icon = mountData.icon
+                    info.func = function(self)
+                        UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value)
+                        UIDropDownMenu_SetText(flyingMountDropdown, self:GetText())
+                    end
+                    UIDropDownMenu_AddButton(info, level)
                 end
-                UIDropDownMenu_AddButton(info, level)
             end
         end
     end)
@@ -164,15 +175,17 @@ local function PopulateDropdownMenus()
         local ownedMounts = MountSwitcherDB.OwnedMounts
         if ownedMounts then
             for creatureSpellID, mountData in pairs(ownedMounts) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = mountData.name
-                info.value = creatureSpellID -- No need to convert to string here
-                info.icon = mountData.icon
-                info.func = function(self)
-                    UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value) -- Set value, not ID
-                    UIDropDownMenu_SetText(groundMountDropdown, self:GetText())
+                if mountData.mountTypeID ~= 248 then -- Check if mount type ID is 248 (flying mount)
+                    local info = UIDropDownMenu_CreateInfo()
+                    info.text = mountData.name
+                    info.value = creatureSpellID
+                    info.icon = mountData.icon
+                    info.func = function(self)
+                        UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value)
+                        UIDropDownMenu_SetText(groundMountDropdown, self:GetText())
+                    end
+                    UIDropDownMenu_AddButton(info, level)
                 end
-                UIDropDownMenu_AddButton(info, level)
             end
         end
     end)
@@ -229,8 +242,10 @@ local function SlashCommandHandler(msg)
             GetOwnedMounts()
         end
     end
+ 
     if msg == "mount" then
         OnMountButton()
+    
     elseif msg == "options" then
         if myFrame:IsShown() then
             myFrame:Hide()
