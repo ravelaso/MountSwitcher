@@ -1,523 +1,415 @@
 -- MountSwitcher.lua
--- WOTLK 3.3.5 Compatible Version
--- Backported from Modern API to Classic 3.3.5 API
+-- WOTLK 3.3.5a Compatible
+--
+-- SECURE TEMPLATE ARCHITECTURE:
+--   The core challenge: casting spells (druid forms, paladin/warlock summons) requires
+--   a SecureActionButtonTemplate. Clicking it *programmatically* from tainted Lua is
+--   blocked in combat. The solution is to make the player's actual keybind/click land
+--   directly on the secure button — never route through a tainted OnClick handler.
+--
+--   Layout:
+--     [Options Frame]  — regular (non-secure) frame for UI/config
+--     [secureButton]   — SecureActionButtonTemplate, VISIBLE, positioned wherever you
+--                        want the clickable mount button to live. The player binds a key
+--                        to it or clicks it directly. Attributes are updated outside of
+--                        combat via zone/event hooks.
+--     [Slash /ms]      — non-combat helper; in-combat it warns the player instead of
+--                        trying to cast (avoids taint).
 
--- Declare MountSwitcherDB as a global variable
+-- ============================================================
+-- SAVED VARIABLES  (declared in .toc: ## SavedVariables: MountSwitcherDB)
+-- ============================================================
 MountSwitcherDB = MountSwitcherDB or {}
-MountSwitcherDB.OwnedMounts = {}
-local IsDebug = false
 
--- Druid Flight Form definitions (spellID, name, icon, isFlying)
-local DRUID_FORMS = {
+-- ============================================================
+-- CONSTANTS
+-- ============================================================
+local ADDON_NAME = "MountSwitcher"
+local IsDebug    = false
+
+-- Druid forms that replace mounts (spellID → data)
+-- Travel Form is treated as a ground mount; both flight forms count as flying.
+local DRUID_FORM_LIST = {
     {
-        spellID = 783, -- Travel Form (ground, but usable in flight areas)
-        name = "Travel Form",
-        icon = "Interface\\Icons\\Ability_Druid_TravelForm",
-        isFlying = false,
-        isDruidForm = true
+        spellID    = 783,
+        name       = "Travel Form",
+        icon       = "Interface\\Icons\\Ability_Druid_TravelForm",
+        isFlying   = false,
+        isDruidForm = true,
     },
     {
-        spellID = 33943, -- Flight Form
-        name = "Flight Form",
-        icon = "Interface\\Icons\\Ability_Druid_FlightForm",
-        isFlying = true,
-        isDruidForm = true
+        spellID    = 33943,
+        name       = "Flight Form",
+        icon       = "Interface\\Icons\\Ability_Druid_FlightForm",
+        isFlying   = true,
+        isDruidForm = true,
     },
     {
-        spellID = 40120, -- Swift Flight Form (better flying speed)
-        name = "Swift Flight Form",
-        icon = "Interface\\Icons\\Ability_Druid_FlightForm",
-        isFlying = true,
-        isDruidForm = true
-    }
+        spellID    = 40120,
+        name       = "Swift Flight Form",
+        icon       = "Interface\\Icons\\Ability_Druid_FlightForm",
+        isFlying   = true,
+        isDruidForm = true,
+    },
 }
 
--- Function to check if player is a Druid
-local function IsPlayerDruid()
+-- ============================================================
+-- UTILITY
+-- ============================================================
+local function Debug(...)
+    if IsDebug then
+        print("|cff00ccff[MS]|r", ...)
+    end
+end
+
+local function PlayerClass()
     local _, class = UnitClass("player")
-    local isDruid = (class == "DRUID")
-    if IsDebug then
-        print("IsPlayerDruid: class =", class, ", isDruid =", isDruid)
-    end
-    return isDruid
+    return class
 end
 
--- Function to get Druid flight forms the player has learned
-local function GetDruidForms()
-    local forms = {}
-    if IsDebug then
-        print("GetDruidForms: Checking for known Druid forms...")
+-- Returns true if the player can use flying mounts right now.
+-- Dalaran is a no-fly zone except for Krasus' Landing (subzone).
+local function CanFlyHere()
+    if not IsFlyableArea() then return false end
+    -- Dalaran city itself is no-fly; Krasus' Landing subzone is the pad.
+    if GetZoneText() == "Dalaran" and GetSubZoneText() ~= "Krasus' Landing" then
+        return false
     end
-    for _, form in ipairs(DRUID_FORMS) do
-        local isKnown = IsSpellKnown(form.spellID)
-        if IsDebug then
-            print("  Checking", form.name, "- SpellID:", form.spellID, "- IsSpellKnown:", isKnown)
-        end
-        if isKnown then
-            table.insert(forms, form)
-            if IsDebug then
-                print("    -> Added", form.name, "to forms list")
-            end
-        end
-    end
-    if IsDebug then
-        print("GetDruidForms: Total forms found:", #forms)
-    end
-    return forms
+    return true
 end
 
--- Create the frame
-local myFrame = CreateFrame("Frame", "MountSwitcherFrame", UIParent)
-myFrame:SetSize(260, 220)
-myFrame:SetPoint("CENTER")
-myFrame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true,
-    insets = { left = 8, right = 8, top = 8, bottom = 8 },
-})
-myFrame:SetMovable(true)
-myFrame:EnableMouse(true)
-myFrame:RegisterForDrag("LeftButton")
-myFrame:SetScript("OnDragStart", myFrame.StartMoving)
-myFrame:SetScript("OnDragStop", myFrame.StopMovingOrSizing)
-myFrame:SetScript("OnHide", myFrame.StopMovingOrSizing)
-myFrame:Hide()
+-- ============================================================
+-- MOUNT DATABASE  (populated at login / on COMPANION_LEARNED)
+-- ============================================================
+-- Key: spellID (number)
+-- Value: { name, spellID, icon, isFlying, isDruidForm, companionIndex|nil }
+local OwnedMounts = {}
 
--- Add a close button (X button top-right corner)
-local closeButton = CreateFrame("Button", nil, myFrame, "UIPanelCloseButton")
-closeButton:SetSize(32, 32)
-closeButton:SetPoint("TOPRIGHT", -5, -5)
-closeButton:SetScript("OnClick", function()
-    myFrame:Hide()
-end)
+local function RebuildMountDatabase()
+    wipe(OwnedMounts)
 
--- Addon Title
-local title = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-title:SetText("MountSwitcher")
-title:SetPoint("TOPLEFT", 5, -5)
-
--- Create dropdown menus and labels
-local yOffset = -40
-
-local flyingMountLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-flyingMountLabel:SetText("Flying Mount/Form:")
-flyingMountLabel:SetPoint("TOPLEFT", 30, yOffset)
-
-local flyingMountDropdown = CreateFrame("Frame", "FlyingMountDropdown", myFrame, "UIDropDownMenuTemplate")
-flyingMountDropdown:SetPoint("TOPLEFT", flyingMountLabel, "BOTTOMLEFT", -20, -5)
-UIDropDownMenu_SetWidth(flyingMountDropdown, 180)
-
-yOffset = yOffset - 60
-
-local groundMountLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-groundMountLabel:SetText("Ground Mount:")
-groundMountLabel:SetPoint("TOPLEFT", 30, yOffset)
-
-local groundMountDropdown = CreateFrame("Frame", "GroundMountDropdown", myFrame, "UIDropDownMenuTemplate")
-groundMountDropdown:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", -20, -5)
-UIDropDownMenu_SetWidth(groundMountDropdown, 180)
-
--- Create the mount button using a plain button (will change later for Druid support)
-local mountButton = CreateFrame("Button", "MountSwitcherMountButton", myFrame, "GameMenuButtonTemplate")
-mountButton:SetText("Mount")
-mountButton:SetSize(90, 30)
-mountButton:SetPoint("BOTTOMLEFT", groundMountDropdown, "BOTTOMLEFT", 22, -40)
-mountButton:RegisterForClicks("LeftButtonDown")
-
--- Set the OnClick handler for regular mounts (inline to avoid forward reference issue)
-mountButton:SetScript("OnClick", function(self, button)
-    local flySpellID = MountSwitcherDB["FlyingMountSpellID"]
-    local groundSpellID = MountSwitcherDB["GroundMountSpellID"]
-
-    local function UseMount(spellID)
-        if not spellID then
-            return false
-        end
-        local mountData = MountSwitcherDB.OwnedMounts[spellID]
-        if not mountData then
-            return false
-        end
-        if mountData.isDruidForm then
-            DEFAULT_CHAT_FRAME:AddMessage("MountSwitcher: Druid forms cannot be auto-cast by the addon. Please use a manual macro.")
-            return true
-        else
-            CallCompanion("MOUNT", mountData.companionIndex)
-            return true
-        end
-    end
-
-    if (GetZoneText() == "Dalaran") then
-        if (GetSubZoneText() == "Krasus' Landing") then
-            if not UseMount(flySpellID) then
-                UseMount(groundSpellID)
-            end
-        else
-            UseMount(groundSpellID)
-        end
-    elseif IsFlyableArea() then
-        if not UseMount(flySpellID) then
-            UseMount(groundSpellID)
-        end
-    else
-        UseMount(groundSpellID)
-    end
-end)
-
-local saveButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
-saveButton:SetText("Save")
-saveButton:SetSize(90, 30)
-saveButton:SetPoint("LEFT", mountButton, "RIGHT", 5, 0)
-
--- Small Text Label
-local smallTextLabel = myFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-smallTextLabel:SetText("Macro: /ms mount")
-smallTextLabel:SetPoint("TOPLEFT", mountButton, "BOTTOMLEFT", 38, -10)
-
--- Track mount indices for 3.3.5 (companion index, not spell ID)
-local flyingMountIndex = nil
-local groundMountIndex = nil
-
--- Function to save the input data
-local function SaveData()
-    MountSwitcherDB = MountSwitcherDB or {}
-
-    -- Save by spellID (works for both regular mounts and Druid forms)
-    if flyingMountIndex and MountSwitcherDB.OwnedMounts[flyingMountIndex] then
-        MountSwitcherDB["FlyingMountSpellID"] = MountSwitcherDB.OwnedMounts[flyingMountIndex].spellID
-    end
-
-    if groundMountIndex and MountSwitcherDB.OwnedMounts[groundMountIndex] then
-        MountSwitcherDB["GroundMountSpellID"] = MountSwitcherDB.OwnedMounts[groundMountIndex].spellID
-    end
-
-    DEFAULT_CHAT_FRAME:AddMessage("Mounts saved! :)")
-    if IsDebug then
-        print("Saved Fly SpellID - ", MountSwitcherDB["FlyingMountSpellID"])
-        print("Saved Ground SpellID - ", MountSwitcherDB["GroundMountSpellID"])
-    end
-end
-
--- Function to get all mounts that the player owns (3.3.5 API)
-local function GetOwnedMounts()
-    MountSwitcherDB = MountSwitcherDB or {}
-    MountSwitcherDB.OwnedMounts = {}
-
-    local numCompanions = GetNumCompanions("MOUNT")
-
-    if IsDebug then
-        print("Total mounts found:", numCompanions)
-    end
-
-    for i = 1, numCompanions do
-        -- 3.3.5 API: GetCompanionInfo("type", index)
-        -- Returns: creatureID, creatureName, creatureSpellID, icon, issummoned, mountTypeID
-        local creatureID, creatureName, creatureSpellID, icon, issummoned, mountTypeID = GetCompanionInfo("MOUNT", i)
-
-        -- Handle case where mountTypeID is nil (some mounts don't return it)
-        -- Default to ground mount if mountTypeID is nil
-        local isFlying = false
-        if mountTypeID then
-            -- mountTypeID in 3.3.5 is a bitmask:
-            -- bit.band(mountTypeID, 3) == 0 : Water mount
-            -- bit.band(mountTypeID, 3) == 1 : Ground mount
-            -- bit.band(mountTypeID, 3) == 3 : Flying mount
-            isFlying = (bit.band(mountTypeID, 3) == 3)
-        end
-
-        -- Store by spellID as key (stable, works for both regular mounts and Druid forms)
-        MountSwitcherDB.OwnedMounts[creatureSpellID] = {
-            name = creatureName,
-            spellID = creatureSpellID,
-            icon = icon,
-            isFlying = isFlying,
-            mountTypeID = mountTypeID,
-            isDruidForm = false,
-            companionIndex = i
-        }
-
-        if IsDebug then
-            local typeString = isFlying and "Flying" or "Ground/Water"
-            print("Found Mount [" .. i .. "]:", creatureName, "-", typeString, "- SpellID:", creatureSpellID)
-        end
-    end
-
-    -- Add Druid flight forms if player is a Druid
-    if IsPlayerDruid() then
-        if IsDebug then
-            print("GetOwnedMounts: Player is a Druid, getting flight forms...")
-        end
-        local druidForms = GetDruidForms()
-        if IsDebug then
-            print("GetOwnedMounts: druidForms returned", #druidForms, "forms")
-        end
-        for _, form in ipairs(druidForms) do
-            MountSwitcherDB.OwnedMounts[form.spellID] = {
-                name = form.name,
-                spellID = form.spellID,
-                icon = form.icon,
-                isFlying = form.isFlying,
-                mountTypeID = nil,
-                isDruidForm = true,
-                companionIndex = nil
+    -- Regular mounts via companion API
+    local total = GetNumCompanions("MOUNT") or 0
+    for i = 1, total do
+        local _, creatureName, creatureSpellID, icon, _, mountTypeID = GetCompanionInfo("MOUNT", i)
+        if creatureSpellID then
+            -- mountTypeID bitmask in 3.3.5:
+            --   bit 0+1 == 0 → water mount
+            --   bit 0+1 == 1 → ground mount
+            --   bit 0+1 == 3 → flying mount
+            local isFlying = mountTypeID and (bit.band(mountTypeID, 3) == 3) or false
+            OwnedMounts[creatureSpellID] = {
+                name           = creatureName,
+                spellID        = creatureSpellID,
+                icon           = icon,
+                isFlying       = isFlying,
+                isDruidForm    = false,
+                companionIndex = i,
             }
+            Debug("Mount found:", creatureName, isFlying and "(flying)" or "(ground)", "idx=", i)
+        end
+    end
 
-            if IsDebug then
-                local typeString = form.isFlying and "Flying Druid Form" or "Ground Druid Form"
-                print("Added Druid form:", form.name, "-", typeString, "- SpellID:", form.spellID)
+    -- Druid forms (only if player is a Druid)
+    if PlayerClass() == "DRUID" then
+        for _, form in ipairs(DRUID_FORM_LIST) do
+            if IsSpellKnown(form.spellID) then
+                OwnedMounts[form.spellID] = {
+                    name           = form.name,
+                    spellID        = form.spellID,
+                    icon           = form.icon,
+                    isFlying       = form.isFlying,
+                    isDruidForm    = true,
+                    companionIndex = nil,
+                }
+                Debug("Druid form found:", form.name)
             end
         end
     end
+
+    -- Persist a copy in SavedVariables so we can cross-reference spellIDs on reload.
+    -- We do NOT persist the whole table (it rebuilds from the API); we only need the
+    -- selected spellIDs, which are already stored separately.
+    MountSwitcherDB.OwnedMounts = OwnedMounts
 end
 
--- Set the OnClick script of the Save button to our SaveData function
-saveButton:SetScript("OnClick", SaveData)
+-- ============================================================
+-- SECURE BUTTON  — the ONLY thing that casts spells
+-- ============================================================
+-- This button must remain visible (even 1×1 px) and must NEVER be touched by
+-- tainted code while in combat.  All attribute writes happen through
+-- UpdateSecureButton(), which guards with InCombatLockdown().
+--
+-- For class mounts (Paladin Charger, Warlock Dreadsteed) and Druid forms the
+-- type is "spell". For regular mounts (items/companions) the type is "macro"
+-- using /stopmacro so we can fall back to CallCompanion outside secure context,
+-- OR we use type="spell" with the companion's spell name.
+--
+-- In 3.3.5a the cleanest approach for regular mounts is type="spell" + the
+-- mount's spell name (same as /cast MountName). This works for all mount
+-- categories without needing CallCompanion at all.
 
--- Function to be executed when the button is clicked
-local function OnMountButton()
-    local flySpellID = MountSwitcherDB["FlyingMountSpellID"]
-    local groundSpellID = MountSwitcherDB["GroundMountSpellID"]
+local secureButton = CreateFrame("Button", "MountSwitcherSecureButton", UIParent,
+                                  "SecureActionButtonTemplate")
+secureButton:SetSize(32, 32)
+secureButton:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+secureButton:SetNormalTexture("Interface\\Icons\\Ability_Mount_MountedHorse")
+secureButton:RegisterForClicks("LeftButtonDown")
 
-    local function UseMount(spellID)
-        if not spellID then
-            return false
-        end
-
-        local mountData = MountSwitcherDB.OwnedMounts[spellID]
-        if not mountData then
-            return false
-        end
-
-        if IsDebug then
-            print("Using mount:", mountData.name, "- isDruidForm:", mountData.isDruidForm)
-        end
-
-        if mountData.isDruidForm then
-            -- Druid forms: cannot cast from addon, show message
-            DEFAULT_CHAT_FRAME:AddMessage("MountSwitcher: Druid forms cannot be auto-cast by the addon. Please use a manual macro.")
-            return true
-        else
-            -- Regular mounts use CallCompanion
-            CallCompanion("MOUNT", mountData.companionIndex)
-            return true
-        end
-    end
-
-    -- 3.3.5 API: CallCompanion("MOUNT", index)
-    if (GetZoneText() == "Dalaran") then
-        if (GetSubZoneText() == "Krasus' Landing") then
-            if not UseMount(flySpellID) then
-                UseMount(groundSpellID)
-            end
-        else
-            UseMount(groundSpellID)
-        end
-    elseif IsFlyableArea() then
-        if not UseMount(flySpellID) then
-            UseMount(groundSpellID)
-        end
-    else
-        UseMount(groundSpellID)
+-- Visual feedback texture (updated when attributes change)
+local function SetSecureButtonIcon(icon)
+    if icon then
+        secureButton:SetNormalTexture(icon)
     end
 end
 
--- NOTE: PreClick script (set above during button creation) handles the secure casting
--- Do NOT use OnClick here - it would cause double-casting!
--- OnClick runs AFTER the secure action is already performed
-
--- Function to populate the dropdown menus with owned mounts (3.3.5 API)
-local function PopulateDropdownMenus()
-    local flyingCount = 0
-    local groundCount = 0
-
-    UIDropDownMenu_Initialize(flyingMountDropdown, function(self, level)
-        local ownedMounts = MountSwitcherDB.OwnedMounts
-        if ownedMounts then
-            for spellID, mountData in pairs(ownedMounts) do
-                if IsDebug then
-                    print("PopulateDropdownMenus: Checking", mountData.name, "- isFlying:", mountData.isFlying, "- isDruidForm:", mountData.isDruidForm)
-                end
-                if mountData.isFlying then -- Only flying mounts
-                    flyingCount = flyingCount + 1
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = mountData.name .. (mountData.isDruidForm and " (Druid)" or "")
-                    info.value = spellID
-                    info.icon = mountData.icon
-                    info.func = function(self)
-                        UIDropDownMenu_SetSelectedValue(flyingMountDropdown, self.value)
-                        UIDropDownMenu_SetText(flyingMountDropdown, self:GetText())
-                        flyingMountIndex = self.value
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end
-        end
-        if IsDebug then
-            print("PopulateDropdownMenus: Added", flyingCount, "flying mounts to dropdown")
-        end
-    end)
-
-    UIDropDownMenu_Initialize(groundMountDropdown, function(self, level)
-        local ownedMounts = MountSwitcherDB.OwnedMounts
-        if ownedMounts then
-            for spellID, mountData in pairs(ownedMounts) do
-                if not mountData.isFlying then -- Only ground/water mounts
-                    groundCount = groundCount + 1
-                    local info = UIDropDownMenu_CreateInfo()
-                    info.text = mountData.name .. (mountData.isDruidForm and " (Druid)" or "")
-                    info.value = spellID
-                    info.icon = mountData.icon
-                    info.func = function(self)
-                        UIDropDownMenu_SetSelectedValue(groundMountDropdown, self.value)
-                        UIDropDownMenu_SetText(groundMountDropdown, self:GetText())
-                        groundMountIndex = self.value
-                    end
-                    UIDropDownMenu_AddButton(info, level)
-                end
-            end
-        end
-        if IsDebug then
-            print("PopulateDropdownMenus: Added", groundCount, "ground mounts to dropdown")
-        end
-    end)
-end
-
--- Function to load the saved data and update the dropdown menus
-local function LoadSavedData()
-    local flySpellID = MountSwitcherDB and MountSwitcherDB["FlyingMountSpellID"] or nil
-    local groundSpellID = MountSwitcherDB and MountSwitcherDB["GroundMountSpellID"] or nil
-
-    -- Update the dropdown menus and select the correct items
-    if flySpellID and MountSwitcherDB.OwnedMounts[flySpellID] then
-        local mountData = MountSwitcherDB.OwnedMounts[flySpellID]
-        UIDropDownMenu_SetSelectedValue(flyingMountDropdown, flySpellID)
-        UIDropDownMenu_SetText(flyingMountDropdown, mountData.name)
-        flyingMountIndex = flySpellID
-    end
-
-    if groundSpellID and MountSwitcherDB.OwnedMounts[groundSpellID] then
-        local mountData = MountSwitcherDB.OwnedMounts[groundSpellID]
-        UIDropDownMenu_SetSelectedValue(groundMountDropdown, groundSpellID)
-        UIDropDownMenu_SetText(groundMountDropdown, mountData.name)
-        groundMountIndex = groundSpellID
-    end
-
-    if IsDebug then
-        print("Loaded Flying Mount SpellID:", flySpellID)
-        print("Loaded Ground Mount SpellID:", groundSpellID)
-    end
-end
-
--- Track whether mounts have been loaded
-local mountsLoaded = false
-local initDelayFrames = 0
-
--- Function to initialize everything after mounts are available
-local function InitializeMountSwitcher(forceReload)
-    if mountsLoaded and not forceReload then
-        if IsDebug then
-            print("InitializeMountSwitcher: Already loaded, skipping")
-        end
+-- Core logic: decide which mount to use and stamp the secure button attributes.
+-- MUST only be called when NOT in combat.
+local function UpdateSecureButton()
+    if InCombatLockdown() then
+        Debug("UpdateSecureButton: skipped, in combat")
         return
     end
 
-    local numCompanions = GetNumCompanions("MOUNT")
-    if IsDebug then
-        print("InitializeMountSwitcher: numCompanions =", numCompanions or "nil")
+    local flySpellID    = MountSwitcherDB.FlyingMountSpellID
+    local groundSpellID = MountSwitcherDB.GroundMountSpellID
+
+    if not flySpellID and not groundSpellID then
+        Debug("UpdateSecureButton: no mounts configured")
+        secureButton:SetAttribute("type", "macro")
+        secureButton:SetAttribute("macrotext", "/run DEFAULT_CHAT_FRAME:AddMessage('MountSwitcher: No mounts configured. Use /ms options')")
+        return
     end
 
-    -- Clear existing mounts if force reloading
-    if forceReload then
-        MountSwitcherDB.OwnedMounts = {}
-        mountsLoaded = false
+    local targetSpellID = CanFlyHere() and (flySpellID or groundSpellID) or (groundSpellID or flySpellID)
+    local mountData     = OwnedMounts[targetSpellID]
+
+    if not mountData then
+        Debug("UpdateSecureButton: spellID", targetSpellID, "not found in OwnedMounts")
+        return
     end
 
-    if numCompanions and numCompanions >= 0 then
-        if IsDebug then
-            print("InitializeMountSwitcher: Calling GetOwnedMounts...")
-        end
-        GetOwnedMounts()
-
-        local mountCount = 0
-        for _ in pairs(MountSwitcherDB.OwnedMounts) do mountCount = mountCount + 1 end
-        if IsDebug then
-            print("InitializeMountSwitcher: OwnedMounts table has", mountCount, "entries")
-        end
-
-        if IsDebug then
-            print("InitializeMountSwitcher: Calling LoadSavedData...")
-        end
-        LoadSavedData()
-
-        if IsDebug then
-            print("InitializeMountSwitcher: Calling PopulateDropdownMenus...")
-        end
-        PopulateDropdownMenus()
-
-        mountsLoaded = true
-
-        if IsDebug then
-            print("InitializeMountSwitcher: Done!")
-        end
+    -- Both druid forms AND regular mount spells are cast with type="spell".
+    -- GetSpellInfo returns the localised spell name which /cast expects.
+    local spellName = GetSpellInfo(mountData.spellID)
+    if not spellName then
+        Debug("UpdateSecureButton: GetSpellInfo returned nil for spellID", mountData.spellID)
+        return
     end
+
+    secureButton:SetAttribute("type",  "spell")
+    secureButton:SetAttribute("spell", spellName)
+    SetSecureButtonIcon(mountData.icon)
+
+    Debug("SecureButton set →", spellName, "|", CanFlyHere() and "FLY" or "GROUND")
 end
 
--- OnUpdate script for delayed initialization
-myFrame:SetScript("OnUpdate", function(self, elapsed)
-    if not mountsLoaded then
-        initDelayFrames = initDelayFrames + 1
-        -- Try initializing after ~1 second (assuming 60fps, that's ~60 frames)
-        if initDelayFrames >= 60 then
-            InitializeMountSwitcher()
-        end
-    end
-end)
+-- ============================================================
+-- EVENT HANDLER FRAME  (non-secure, handles events only)
+-- ============================================================
+local eventFrame = CreateFrame("Frame", "MountSwitcherEventFrame")
 
--- Register the event to load saved data when the player logs in or reloads the UI
-myFrame:RegisterEvent("PLAYER_LOGIN")
-myFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-myFrame:RegisterEvent("COMPANION_LEARNED") -- Fires when a new mount is learned
-myFrame:RegisterEvent("COMPANION_UNLEARNED") -- Fires when a mount is unlearned
-myFrame:SetScript("OnEvent", function(self, event, ...)
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")   -- left combat → re-evaluate zone
+eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+eventFrame:RegisterEvent("ZONE_CHANGED")
+eventFrame:RegisterEvent("COMPANION_LEARNED")
+eventFrame:RegisterEvent("COMPANION_UNLEARNED")
+
+eventFrame:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-        -- Try to initialize immediately first
-        InitializeMountSwitcher()
+        RebuildMountDatabase()
+        UpdateSecureButton()
+
     elseif event == "COMPANION_LEARNED" or event == "COMPANION_UNLEARNED" then
-        -- Refresh mount list when mounts change
-        GetOwnedMounts()
-        PopulateDropdownMenus()
+        RebuildMountDatabase()
+        UpdateSecureButton()
+
+    elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED"
+        or event == "PLAYER_REGEN_ENABLED" then
+        -- Zone changed or left combat: re-stamp attributes for new flyable state.
+        -- RebuildMountDatabase is NOT needed here (companions didn't change).
+        UpdateSecureButton()
     end
 end)
 
--- Slash command handler
-local function SlashCommandHandler(msg)
-    msg = strlower(msg) -- Normalize to lowercase
+-- ============================================================
+-- OPTIONS UI  (non-secure frame — never touches secureButton in combat)
+-- ============================================================
+local optionsFrame = CreateFrame("Frame", "MountSwitcherOptionsFrame", UIParent)
+optionsFrame:SetSize(280, 240)
+optionsFrame:SetPoint("CENTER")
+optionsFrame:SetBackdrop({
+    bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile     = true,
+    insets   = { left = 8, right = 8, top = 8, bottom = 8 },
+})
+optionsFrame:SetMovable(true)
+optionsFrame:EnableMouse(true)
+optionsFrame:RegisterForDrag("LeftButton")
+optionsFrame:SetScript("OnDragStart", optionsFrame.StartMoving)
+optionsFrame:SetScript("OnDragStop",  optionsFrame.StopMovingOrSizing)
+optionsFrame:SetScript("OnHide",      optionsFrame.StopMovingOrSizing)
+optionsFrame:Hide()
 
-    if msg == "debug" then
-        if IsDebug then
-            IsDebug = false
-            print("Debug mode Off")
-        else
-            IsDebug = true
-            print("Debug mode On - Reloading mounts...")
-            InitializeMountSwitcher(true) -- Force reload with debug
+-- Close button
+local closeBtn = CreateFrame("Button", nil, optionsFrame, "UIPanelCloseButton")
+closeBtn:SetSize(32, 32)
+closeBtn:SetPoint("TOPRIGHT", -5, -5)
+closeBtn:SetScript("OnClick", function() optionsFrame:Hide() end)
+
+-- Title
+local titleText = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+titleText:SetText("MountSwitcher")
+titleText:SetPoint("TOPLEFT", 15, -10)
+
+-- ── Flying mount dropdown ──────────────────────────────────
+local flyLabel = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+flyLabel:SetText("Flying Mount / Form:")
+flyLabel:SetPoint("TOPLEFT", 30, -45)
+
+local flyDropdown = CreateFrame("Frame", "MSSFlyDropdown", optionsFrame, "UIDropDownMenuTemplate")
+flyDropdown:SetPoint("TOPLEFT", flyLabel, "BOTTOMLEFT", -20, -2)
+UIDropDownMenu_SetWidth(flyDropdown, 190)
+
+-- ── Ground mount dropdown ──────────────────────────────────
+local groundLabel = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+groundLabel:SetText("Ground Mount / Form:")
+groundLabel:SetPoint("TOPLEFT", 30, -115)
+
+local groundDropdown = CreateFrame("Frame", "MSSGroundDropdown", optionsFrame, "UIDropDownMenuTemplate")
+groundDropdown:SetPoint("TOPLEFT", groundLabel, "BOTTOMLEFT", -20, -2)
+UIDropDownMenu_SetWidth(groundDropdown, 190)
+
+-- Pending selections (committed on Save)
+local pendingFlySpellID    = nil
+local pendingGroundSpellID = nil
+
+-- Builds and assigns the initializer function for a dropdown.
+-- filterFn(mountData) → true if this mount should appear in the list.
+local function InitDropdown(dropdown, filterFn, onSelect)
+    UIDropDownMenu_Initialize(dropdown, function(self, level)
+        for spellID, mountData in pairs(OwnedMounts) do
+            if filterFn(mountData) then
+                local info  = UIDropDownMenu_CreateInfo()
+                info.text   = mountData.name .. (mountData.isDruidForm and " (Druid)" or "")
+                info.value  = spellID
+                info.icon   = mountData.icon
+                info.func   = function(btn)
+                    UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
+                    UIDropDownMenu_SetText(dropdown, btn:GetText())
+                    onSelect(btn.value)
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
         end
-    elseif msg == "mount" then
-        OnMountButton()
-    elseif msg == "options" then
-        if myFrame:IsShown() then
-            myFrame:Hide()
-        else
-            myFrame:Show()
-        end
-    else
-        DEFAULT_CHAT_FRAME:AddMessage("MountSwitcher - Usage:")
-        DEFAULT_CHAT_FRAME:AddMessage("/ms mount - Summon your selected mount")
-        DEFAULT_CHAT_FRAME:AddMessage("/ms options - Open/close options panel")
-        DEFAULT_CHAT_FRAME:AddMessage("/ms debug - Toggle debug mode")
+    end)
+end
+
+local function PopulateDropdowns()
+    InitDropdown(flyDropdown,
+        function(m) return m.isFlying end,
+        function(v) pendingFlySpellID = v end
+    )
+    InitDropdown(groundDropdown,
+        function(m) return not m.isFlying end,
+        function(v) pendingGroundSpellID = v end
+    )
+
+    -- Restore previously saved selections into the dropdown text/value
+    local flyID    = MountSwitcherDB.FlyingMountSpellID
+    local groundID = MountSwitcherDB.GroundMountSpellID
+
+    if flyID and OwnedMounts[flyID] then
+        UIDropDownMenu_SetSelectedValue(flyDropdown, flyID)
+        UIDropDownMenu_SetText(flyDropdown, OwnedMounts[flyID].name)
+        pendingFlySpellID = flyID
+    end
+    if groundID and OwnedMounts[groundID] then
+        UIDropDownMenu_SetSelectedValue(groundDropdown, groundID)
+        UIDropDownMenu_SetText(groundDropdown, OwnedMounts[groundID].name)
+        pendingGroundSpellID = groundID
     end
 end
 
--- Register slash command /ms (3.3.5 compatible syntax)
+-- ── Save button ────────────────────────────────────────────
+local saveBtn = CreateFrame("Button", nil, optionsFrame, "GameMenuButtonTemplate")
+saveBtn:SetText("Save")
+saveBtn:SetSize(100, 28)
+saveBtn:SetPoint("BOTTOM", optionsFrame, "BOTTOM", 0, 18)
+saveBtn:SetScript("OnClick", function()
+    if InCombatLockdown() then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r Cannot save during combat.")
+        return
+    end
+
+    MountSwitcherDB.FlyingMountSpellID  = pendingFlySpellID    or MountSwitcherDB.FlyingMountSpellID
+    MountSwitcherDB.GroundMountSpellID  = pendingGroundSpellID or MountSwitcherDB.GroundMountSpellID
+
+    UpdateSecureButton()
+
+    DEFAULT_CHAT_FRAME:AddMessage("|cff00ff88[MountSwitcher]|r Mounts saved!")
+    Debug("Saved fly=", MountSwitcherDB.FlyingMountSpellID,
+          "ground=", MountSwitcherDB.GroundMountSpellID)
+end)
+
+-- Show the options frame and refresh dropdowns each time it opens
+local originalShow = optionsFrame.Show
+optionsFrame.Show = function(self)
+    PopulateDropdowns()
+    originalShow(self)
+end
+
+-- ============================================================
+-- SLASH COMMANDS
+-- ============================================================
 SLASH_MountSwitcher1 = "/ms"
-SlashCmdList["MountSwitcher"] = SlashCommandHandler
+SlashCmdList["MountSwitcher"] = function(msg)
+    msg = strtrim(strlower(msg or ""))
+
+    if msg == "mount" then
+        if InCombatLockdown() then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r In combat — click the mount button directly.")
+            return
+        end
+        -- Outside combat: update then programmatically click the secure button.
+        -- This is safe because we are not in combat (no lockdown).
+        UpdateSecureButton()
+        secureButton:Click()
+
+    elseif msg == "options" then
+        if optionsFrame:IsShown() then
+            optionsFrame:Hide()
+        else
+            optionsFrame:Show()
+        end
+
+    elseif msg == "debug" then
+        IsDebug = not IsDebug
+        print("|cff00ccff[MountSwitcher]|r Debug:", IsDebug and "ON" or "OFF")
+        if IsDebug then
+            RebuildMountDatabase()
+            UpdateSecureButton()
+        end
+
+    elseif msg == "reload" then
+        if InCombatLockdown() then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r Cannot reload during combat.")
+            return
+        end
+        RebuildMountDatabase()
+        PopulateDropdowns()
+        UpdateSecureButton()
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r Mount list reloaded.")
+
+    else
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r Commands:")
+        DEFAULT_CHAT_FRAME:AddMessage("  /ms mount   — Summon selected mount (out of combat)")
+        DEFAULT_CHAT_FRAME:AddMessage("  /ms options — Toggle options panel")
+        DEFAULT_CHAT_FRAME:AddMessage("  /ms reload  — Refresh mount list")
+        DEFAULT_CHAT_FRAME:AddMessage("  /ms debug   — Toggle debug output")
+        DEFAULT_CHAT_FRAME:AddMessage("Tip: Bind a key to 'MountSwitcherSecureButton' for in-combat use.")
+    end
+end
