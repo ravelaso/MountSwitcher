@@ -118,11 +118,51 @@ local groundMountDropdown = CreateFrame("Frame", "GroundMountDropdown", myFrame,
 groundMountDropdown:SetPoint("TOPLEFT", groundMountLabel, "BOTTOMLEFT", -20, -5)
 UIDropDownMenu_SetWidth(groundMountDropdown, 180)
 
--- Create the buttons
-local mountButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
+-- Create the mount button using a plain button (will change later for Druid support)
+local mountButton = CreateFrame("Button", "MountSwitcherMountButton", myFrame, "GameMenuButtonTemplate")
 mountButton:SetText("Mount")
 mountButton:SetSize(90, 30)
 mountButton:SetPoint("BOTTOMLEFT", groundMountDropdown, "BOTTOMLEFT", 22, -40)
+mountButton:RegisterForClicks("LeftButtonDown")
+
+-- Set the OnClick handler for regular mounts (inline to avoid forward reference issue)
+mountButton:SetScript("OnClick", function(self, button)
+    local flySpellID = MountSwitcherDB["FlyingMountSpellID"]
+    local groundSpellID = MountSwitcherDB["GroundMountSpellID"]
+
+    local function UseMount(spellID)
+        if not spellID then
+            return false
+        end
+        local mountData = MountSwitcherDB.OwnedMounts[spellID]
+        if not mountData then
+            return false
+        end
+        if mountData.isDruidForm then
+            DEFAULT_CHAT_FRAME:AddMessage("MountSwitcher: Druid forms cannot be auto-cast by the addon. Please use a manual macro.")
+            return true
+        else
+            CallCompanion("MOUNT", mountData.companionIndex)
+            return true
+        end
+    end
+
+    if (GetZoneText() == "Dalaran") then
+        if (GetSubZoneText() == "Krasus' Landing") then
+            if not UseMount(flySpellID) then
+                UseMount(groundSpellID)
+            end
+        else
+            UseMount(groundSpellID)
+        end
+    elseif IsFlyableArea() then
+        if not UseMount(flySpellID) then
+            UseMount(groundSpellID)
+        end
+    else
+        UseMount(groundSpellID)
+    end
+end)
 
 local saveButton = CreateFrame("Button", nil, myFrame, "GameMenuButtonTemplate")
 saveButton:SetText("Save")
@@ -281,8 +321,9 @@ local function OnMountButton()
     end
 end
 
--- Set the OnClick script of the button to our function
-mountButton:SetScript("OnClick", OnMountButton)
+-- NOTE: PreClick script (set above during button creation) handles the secure casting
+-- Do NOT use OnClick here - it would cause double-casting!
+-- OnClick runs AFTER the secure action is already performed
 
 -- Function to populate the dropdown menus with owned mounts (3.3.5 API)
 local function PopulateDropdownMenus()
