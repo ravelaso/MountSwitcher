@@ -4,5 +4,6 @@
 ## Author: @Ravelaso: Buenclima-Golemagg
 ## Version: 1.4.0
 ## SavedVariablesPerCharacter: MountSwitcherDB
+Bindings.xml
 MountSwitcher.xml
 MountSwitcher.lua

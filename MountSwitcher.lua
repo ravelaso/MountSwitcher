@@ -515,11 +515,11 @@ optionsFrame.Show = function(self)
 end
 
 -- ============================================================
--- KEY BINDING REGISTRATION
+-- KEY BINDING LABELS
 -- ============================================================
--- These globals tell Blizzard's Key Bindings UI what to display.
--- The header groups the binding under "MountSwitcher".
--- The binding name must match: CLICK <FrameName>:<MouseButton>
+-- The binding itself is declared in Bindings.xml so Blizzard's
+-- Key Bindings UI registers it.  These globals provide the
+-- human-readable header and action labels shown in that UI.
 BINDING_HEADER_MOUNTSWITCHER                               = "MountSwitcher"
 BINDING_NAME_CLICK_MountSwitcherSecureButton_LeftButton    = "Summon Mount"
 
