@@ -99,7 +99,7 @@ end
 -- BAR FRAME  (draggable shell around the secure button)
 -- ============================================================
 local barFrame = CreateFrame("Frame", "MountSwitcherBar", UIParent)
-barFrame:SetSize(BUTTON_SIZE + 4, BUTTON_SIZE + 4)
+barFrame:SetSize(BUTTON_SIZE + 12, BUTTON_SIZE + 12)
 barFrame:SetClampedToScreen(true)
 barFrame:SetMovable(true)
 
@@ -313,6 +313,10 @@ eventFrame:SetScript("OnEvent", function(self, event)
         RebuildMountDatabase()
         RestoreBarPosition()
         SetBarLocked(MountSwitcherDB.BarLocked ~= false)
+        if MountSwitcherDB.HideBar then
+            barFrame:SetAlpha(0)
+            barFrame:EnableMouse(false)
+        end
         UpdateSecureButton()
         RefreshHotkeyLabel()
 
@@ -352,7 +356,7 @@ end)
 -- Total frame height: 250
 
 optionsFrame = CreateFrame("Frame", "MountSwitcherOptionsFrame", UIParent)
-optionsFrame:SetSize(300, 195)
+optionsFrame:SetSize(380, 280)
 optionsFrame:SetPoint("CENTER")
 optionsFrame:SetBackdrop({
     bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -383,7 +387,7 @@ titleText:SetPoint("TOPLEFT", 15, -12)
 
 -- ── Divider after title ──────────────────────────────────────
 local div1 = optionsFrame:CreateTexture(nil, "ARTWORK")
-div1:SetTexture("Interface\\Tooltips\\UI-Tooltip-Border")
+div1:SetTexture(1, 1, 1, 0.15)
 div1:SetHeight(1)
 div1:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -34)
 div1:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -34)
@@ -395,11 +399,11 @@ flyLabel:SetPoint("TOPLEFT", 20, -42)
 
 local flyDropdown = CreateFrame("Frame", "MSSFlyDropdown", optionsFrame, "UIDropDownMenuTemplate")
 flyDropdown:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 0, -57)
-UIDropDownMenu_SetWidth(flyDropdown, 220)
+UIDropDownMenu_SetWidth(flyDropdown, 300)
 
 -- ── Divider ──────────────────────────────────────────────────
 local div2 = optionsFrame:CreateTexture(nil, "ARTWORK")
-div2:SetTexture("Interface\\Tooltips\\UI-Tooltip-Border")
+div2:SetTexture(1, 1, 1, 0.15)
 div2:SetHeight(1)
 div2:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -100)
 div2:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -100)
@@ -411,11 +415,16 @@ groundLabel:SetPoint("TOPLEFT", 20, -108)
 
 local groundDropdown = CreateFrame("Frame", "MSSGroundDropdown", optionsFrame, "UIDropDownMenuTemplate")
 groundDropdown:SetPoint("TOPLEFT", optionsFrame, "TOPLEFT", 0, -123)
-UIDropDownMenu_SetWidth(groundDropdown, 220)
+UIDropDownMenu_SetWidth(groundDropdown, 300)
+
+-- ── Divider before keybind hint ───────────────────────────────
+local div3 = optionsFrame:CreateTexture(nil, "ARTWORK")
+div3:SetTexture(1, 1, 1, 0.15)
+div3:SetHeight(1)
+div3:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -164)
+div3:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -164)
 
 -- ── Keybind hint ─────────────────────────────────────────────
--- The binding lives in Blizzard's standard Key Bindings UI under
--- the "MountSwitcher" section (registered via BINDING_HEADER_ globals below).
 local keybindHint1 = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 keybindHint1:SetText("To set a keybind, open Key Bindings (ESC)")
 keybindHint1:SetTextColor(0.7, 0.7, 0.7)
@@ -425,12 +434,30 @@ local keybindHint2 = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNorm
 keybindHint2:SetText("and look for the |cffffd700MountSwitcher|r section at the bottom.")
 keybindHint2:SetPoint("TOPLEFT", 20, -188)
 
+-- ── Hide Bar checkbox ────────────────────────────────────────
+local hideBarCB = CreateFrame("CheckButton", "MSSHideBarCB", optionsFrame, "UICheckButtonTemplate")
+hideBarCB:SetSize(26, 26)
+hideBarCB:SetPoint("TOPLEFT", 16, -202)
+local hideBarLabel = hideBarCB:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+hideBarLabel:SetText("Hide action bar (keybind still works)")
+hideBarLabel:SetPoint("LEFT", hideBarCB, "RIGHT", 4, 0)
+hideBarCB:SetScript("OnClick", function(self)
+    MountSwitcherDB.HideBar = self:GetChecked() and true or false
+    if MountSwitcherDB.HideBar then
+        barFrame:SetAlpha(0)
+        barFrame:EnableMouse(false)
+    else
+        barFrame:SetAlpha(1)
+        if not barLocked then barFrame:EnableMouse(true) end
+    end
+end)
+
 -- ── Divider before buttons ────────────────────────────────────
 local div4 = optionsFrame:CreateTexture(nil, "ARTWORK")
-div4:SetTexture("Interface\\Tooltips\\UI-Tooltip-Border")
+div4:SetTexture(1, 1, 1, 0.15)
 div4:SetHeight(1)
-div4:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -168)
-div4:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -168)
+div4:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -234)
+div4:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -234)
 
 -- ── Pending selection state (set by dropdowns, committed by Save) ───
 local pendingFlyID    = nil
@@ -511,6 +538,7 @@ local origShow = optionsFrame.Show
 optionsFrame.Show = function(self)
     PopulateDropdowns()
     lockBtn:SetText(barLocked and "Unlock Bar" or "Lock Bar")
+    hideBarCB:SetChecked(MountSwitcherDB.HideBar or false)
     origShow(self)
 end
 

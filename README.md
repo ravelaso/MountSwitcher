@@ -1,16 +1,10 @@
 # MountSwitcher
-World Of Warcraft - WOTLK Classic Addon
+World Of Warcraft - WOTLK 3.3.5 (Warmane)
 
 Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 
-![mountswitcher](https://github.com/ravelaso/MountSwitcher/assets/18076680/59f954fd-43ca-417a-b3af-6895bd92c967)
-
-
-**IMPORTANT**
-
-Druid forms (Shapeshift) is not a mount but a Skill, due to how they work, 
-
-I can't cast a skill only mounts. (Still looking for a solution, help appreciated)
+[//]: # (![mountswitcher]&#40;https://github.com/ravelaso/MountSwitcher/assets/18076680/59f954fd-43ca-417a-b3af-6895bd92c967&#41;)
+![screenshot.png](screenshot.png)
 
 
 ## How to Use
@@ -23,12 +17,13 @@ I can't cast a skill only mounts. (Still looking for a solution, help appreciate
 ### 2 - Set your Flying/Ground mounts
 Select them from each dropdown, then click safe button!
 
-### 3 - Create a macro
-Create a macro with the following:
-```
-/ms mount
-```
+### 3 - Set a Keybind
+Go to Keybinding (ESC -> Keybindings) and set the MountSwitcher action to your prefer keybinding.
 
+![keybinds.png](keybinds.png)
+
+
+### 4 - Hide or move arround the small Action Bar
 
 ## Manual Installation
 
@@ -36,7 +31,7 @@ Copy the folder **MountSwitcher** from the zip file.
 
 Paste under your addons folder:
 ```
-\World of Warcraft\_classic_\Interface\AddOns
+\World of Warcraft 3.3.5\Interface\AddOns
 ```
 
 
