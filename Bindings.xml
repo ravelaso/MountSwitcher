@@ -1,0 +1,4 @@
+<Bindings>
+    <Binding name="CLICK MountSwitcherSecureButton:LeftButton" header="MOUNTSWITCHER" description="Summon Mount">
+    </Binding>
+</Bindings>
