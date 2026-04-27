@@ -30,10 +30,49 @@ local ADDON_NAME   = "MountSwitcher"
 local BUTTON_SIZE  = 36   -- pixels, matches standard action bar slot size
 local IsDebug      = false
 
-local DRUID_FORM_LIST = {
-    { spellID = 783,   name = "Travel Form",      icon = "Interface\\Icons\\Ability_Druid_TravelForm",  isFlying = false },
-    { spellID = 33943, name = "Flight Form",       icon = "Interface\\Icons\\Ability_Druid_FlightForm", isFlying = true  },
-    { spellID = 40120, name = "Swift Flight Form", icon = "Interface\\Icons\\Ability_Druid_FlightForm", isFlying = true  },
+-- ============================================================
+-- CLASS-SPECIFIC MOUNT SPELLS
+-- ============================================================
+-- These are learned as spells (not companion mounts) and need to be
+-- injected into OwnedMounts manually, exactly like Druid forms.
+-- isFlying drives which slot they default-suggest in, but the player
+-- can assign them to either slot — the dropdowns show everything.
+--
+-- Paladin:
+--   33391 Summon Charger          (epic ground, learned ~level 61 via class quest / trainer)
+--    --   Summon Warhorse is companion-registered via GetCompanionInfo in most 3.3.5 builds,
+--         so we only inject the ones that are NOT reliably in the companion list.
+-- Warlock:
+--   23161 Summon Dreadsteed       (epic ground, from Warlock mount quest)
+--    --   Summon Felsteed (5784) is companion-registered in most builds; skip.
+-- Death Knight:
+--   48778 Deathcharger's Reins (Acherus Deathcharger) — granted automatically
+--         during the DK starting-zone questline; IS in the companion list on
+--         most realms, but some private-server builds miss it, so we inject
+--         it defensively.  Duplicate-checking below prevents double entries.
+--
+-- NOTE: If a spell is ALSO returned by GetCompanionInfo the duplicate-check
+-- (OwnedMounts[spellID] already exists → skip) prevents it appearing twice.
+
+local CLASS_SPELL_LIST = {
+    PALADIN = {
+        { spellID = 33391, name = "Summon Charger",       icon = "Interface\\Icons\\Spell_Holy_SummonCharger",    isFlying = false },
+        -- Summon Warhorse (13819) is almost always in companion list; add only as fallback
+        { spellID = 13819, name = "Summon Warhorse",      icon = "Interface\\Icons\\Spell_Holy_SummonCharger",    isFlying = false },
+    },
+    WARLOCK = {
+        { spellID = 23161, name = "Summon Dreadsteed",    icon = "Interface\\Icons\\Spell_Shadow_SummonFelsteed", isFlying = false },
+        -- Summon Felsteed (5784) is almost always in companion list; add only as fallback
+        { spellID =  5784, name = "Summon Felsteed",      icon = "Interface\\Icons\\Spell_Shadow_SummonFelsteed", isFlying = false },
+    },
+    DEATHKNIGHT = {
+        { spellID = 48778, name = "Acherus Deathcharger", icon = "Interface\\Icons\\Ability_Mount_Deathknight",   isFlying = false },
+    },
+    DRUID = {
+        { spellID =   783, name = "Travel Form",          icon = "Interface\\Icons\\Ability_Druid_TravelForm",    isFlying = false },
+        { spellID = 33943, name = "Flight Form",          icon = "Interface\\Icons\\Ability_Druid_FlightForm",    isFlying = true  },
+        { spellID = 40120, name = "Swift Flight Form",    icon = "Interface\\Icons\\Ability_Druid_FlightForm",    isFlying = true  },
+    },
 }
 
 -- ============================================================
@@ -63,36 +102,46 @@ local OwnedMounts = {}
 
 local function RebuildMountDatabase()
     wipe(OwnedMounts)
+
+    -- 1. All companion mounts (no isFlying filtering — player decides assignment)
     local total = GetNumCompanions("MOUNT") or 0
     for i = 1, total do
-        local _, name, spellID, icon, _, mountTypeID = GetCompanionInfo("MOUNT", i)
-        if spellID then
-            local isFlying = mountTypeID and (bit.band(mountTypeID, 3) == 3) or false
+        local _, name, spellID, icon = GetCompanionInfo("MOUNT", i)
+        if spellID and name then
             OwnedMounts[spellID] = {
                 name           = name,
                 spellID        = spellID,
                 icon           = icon,
-                isFlying       = isFlying,
+                isFlying       = false,   -- unused for filtering; kept for compat
                 isDruidForm    = false,
+                isClassSpell   = false,
                 companionIndex = i,
             }
         end
     end
-    if PlayerClass() == "DRUID" then
-        for _, form in ipairs(DRUID_FORM_LIST) do
-            if IsSpellKnown(form.spellID) then
-                OwnedMounts[form.spellID] = {
-                    name        = form.name,
-                    spellID     = form.spellID,
-                    icon        = form.icon,
-                    isFlying    = form.isFlying,
-                    isDruidForm = true,
+
+    -- 2. Class-specific spells (Druid forms, Paladin/Warlock mounts, DK mount, etc.)
+    local class = PlayerClass()
+    local classSpells = CLASS_SPELL_LIST[class]
+    if classSpells then
+        for _, spell in ipairs(classSpells) do
+            if IsSpellKnown(spell.spellID) and not OwnedMounts[spell.spellID] then
+                -- Only inject if not already present from GetCompanionInfo
+                OwnedMounts[spell.spellID] = {
+                    name         = spell.name,
+                    spellID      = spell.spellID,
+                    icon         = spell.icon,
+                    isFlying     = spell.isFlying,
+                    isDruidForm  = (class == "DRUID"),
+                    isClassSpell = true,
                 }
+                Debug("Injected class spell:", spell.name, spell.spellID)
             end
         end
     end
+
     MountSwitcherDB.OwnedMounts = OwnedMounts
-    Debug("Mount database rebuilt.")
+    Debug("Mount database rebuilt. Total entries:", #OwnedMounts)
 end
 
 -- ============================================================
@@ -274,6 +323,9 @@ local function UpdateSecureButton()
         return
     end
 
+    -- Slot 1 (FlyingMountSpellID) is used in flying zones,
+    -- Slot 2 (GroundMountSpellID) is used everywhere else.
+    -- The player is responsible for assigning the right mount to each slot.
     local targetID  = CanFlyHere() and (flyID or groundID) or (groundID or flyID)
     local mountData = OwnedMounts[targetID]
 
@@ -292,7 +344,7 @@ local function UpdateSecureButton()
     secureButton:SetAttribute("spell", spellName)
     iconTexture:SetTexture(mountData.icon)
 
-    Debug("→", spellName, CanFlyHere() and "[FLY]" or "[GROUND]")
+    Debug("→", spellName, CanFlyHere() and "[SLOT1/FLY]" or "[SLOT2/GROUND]")
 end
 
 -- ============================================================
@@ -341,19 +393,17 @@ end)
 --
 --   [ Title "MountSwitcher"          ] [X]   y= -10
 --   ─────────────────────────────────────
---   Flying Mount / Form:                     y= -42
---   [ Dropdown ▾                    ]        y= -57  (h≈32, dd widget is 32px tall)
+--   Slot 1 — Flying zones:                   y= -42
+--   [ Dropdown ▾                    ]        y= -57
 --   ─────────────────────────────────────
---   Ground Mount / Form:                     y= -102
+--   Slot 2 — Ground zones:                   y= -102
 --   [ Dropdown ▾                    ]        y= -117
 --   ─────────────────────────────────────
---   Keybind: Summon Mount
---   [ Press a key...     ] [Clear]           y= -165
+--   Keybind hint                             y= -165
 --   ─────────────────────────────────────
---   [ Unlock Bar  ]        [ Save ]          y= -210
+--   [x] Hide action bar checkbox             y= -202
 --   ─────────────────────────────────────
---
--- Total frame height: 250
+--   [ Unlock Bar  ]        [ Save ]          y= bottom
 
 optionsFrame = CreateFrame("Frame", "MountSwitcherOptionsFrame", UIParent)
 optionsFrame:SetSize(380, 280)
@@ -392,9 +442,9 @@ div1:SetHeight(1)
 div1:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -34)
 div1:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -34)
 
--- ── Flying dropdown (y= -42 label, -57 dropdown) ────────────
+-- ── Slot 1 dropdown (flying zones) ──────────────────────────
 local flyLabel = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-flyLabel:SetText("Flying Mount / Form:")
+flyLabel:SetText("Slot 1 — Flying zones:")
 flyLabel:SetPoint("TOPLEFT", 20, -42)
 
 local flyDropdown = CreateFrame("Frame", "MSSFlyDropdown", optionsFrame, "UIDropDownMenuTemplate")
@@ -408,9 +458,9 @@ div2:SetHeight(1)
 div2:SetPoint("TOPLEFT",  optionsFrame, "TOPLEFT",  12, -100)
 div2:SetPoint("TOPRIGHT", optionsFrame, "TOPRIGHT", -12, -100)
 
--- ── Ground dropdown (y= -108 label, -123 dropdown) ──────────
+-- ── Slot 2 dropdown (ground zones) ──────────────────────────
 local groundLabel = optionsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-groundLabel:SetText("Ground Mount / Form:")
+groundLabel:SetText("Slot 2 — Ground zones:")
 groundLabel:SetPoint("TOPLEFT", 20, -108)
 
 local groundDropdown = CreateFrame("Frame", "MSSGroundDropdown", optionsFrame, "UIDropDownMenuTemplate")
@@ -464,7 +514,6 @@ local pendingFlyID    = nil
 local pendingGroundID = nil
 
 -- ── Bottom row: Lock button (left) + Save button (right) ────
--- Anchored to BOTTOMLEFT / BOTTOMRIGHT with fixed X insets — cannot overlap.
 local lockBtn = CreateFrame("Button", nil, optionsFrame, "GameMenuButtonTemplate")
 lockBtn:SetSize(126, 26)
 lockBtn:SetPoint("BOTTOMLEFT", optionsFrame, "BOTTOMLEFT", 15, 12)
@@ -490,34 +539,45 @@ saveBtn:SetScript("OnClick", function()
 end)
 
 -- ── Dropdown helpers ─────────────────────────────────────────
+-- Both dropdowns now show ALL mounts and class spells without filtering.
+-- The player assigns whichever they want to each slot.
 
-local function InitDropdown(dropdown, filterFn, onSelect)
+local function InitDropdown(dropdown, onSelect)
     UIDropDownMenu_Initialize(dropdown, function(self, level)
+        -- Sort alphabetically for readability; skip any entries with a nil name
+        -- (can happen on some private-server builds where GetCompanionInfo is incomplete)
+        local sorted = {}
         for spellID, mountData in pairs(OwnedMounts) do
-            if filterFn(mountData) then
-                local info    = UIDropDownMenu_CreateInfo()
-                info.text     = mountData.name .. (mountData.isDruidForm and " (Druid)" or "")
-                info.value    = spellID
-                info.icon     = mountData.icon
-                info.func     = function(btn)
-                    UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
-                    UIDropDownMenu_SetText(dropdown, btn:GetText())
-                    onSelect(btn.value)
-                end
-                UIDropDownMenu_AddButton(info, level)
+            if mountData.name and mountData.spellID then
+                sorted[#sorted + 1] = mountData
+            else
+                Debug("Skipping mount entry with nil name/spellID, spellID=", spellID)
             end
+        end
+        table.sort(sorted, function(a, b)
+            -- Extra safety: treat any remaining nil name as empty string
+            return (a.name or "") < (b.name or "")
+        end)
+
+        for _, mountData in ipairs(sorted) do
+            local info    = UIDropDownMenu_CreateInfo()
+            local suffix  = mountData.isClassSpell and " *" or ""
+            info.text     = (mountData.name or "Unknown") .. suffix
+            info.value    = mountData.spellID
+            info.icon     = mountData.icon
+            info.func     = function(btn)
+                UIDropDownMenu_SetSelectedValue(dropdown, btn.value)
+                UIDropDownMenu_SetText(dropdown, btn:GetText())
+                onSelect(btn.value)
+            end
+            UIDropDownMenu_AddButton(info, level)
         end
     end)
 end
 
 local function PopulateDropdowns()
-    InitDropdown(flyDropdown,
-        function(m) return m.isFlying end,
-        function(v) pendingFlyID = v end)
-
-    InitDropdown(groundDropdown,
-        function(m) return not m.isFlying end,
-        function(v) pendingGroundID = v end)
+    InitDropdown(flyDropdown,    function(v) pendingFlyID    = v end)
+    InitDropdown(groundDropdown, function(v) pendingGroundID = v end)
 
     local flyID    = MountSwitcherDB.FlyingMountSpellID
     local groundID = MountSwitcherDB.GroundMountSpellID
@@ -545,9 +605,6 @@ end
 -- ============================================================
 -- KEY BINDING LABELS
 -- ============================================================
--- The binding itself is declared in Bindings.xml so Blizzard's
--- Key Bindings UI registers it.  These globals provide the
--- human-readable header and action labels shown in that UI.
 BINDING_HEADER_MOUNTSWITCHER                               = "MountSwitcher"
 BINDING_NAME_CLICK_MountSwitcherSecureButton_LeftButton    = "Summon Mount"
 
@@ -600,5 +657,6 @@ SlashCmdList["MountSwitcher"] = function(msg)
         DEFAULT_CHAT_FRAME:AddMessage("  /ms mount    — Summon mount (out of combat only)")
         DEFAULT_CHAT_FRAME:AddMessage("  /ms debug    — Toggle debug output")
         DEFAULT_CHAT_FRAME:AddMessage("|cff00ccffTip:|r Key Bindings → MountSwitcher → Summon Mount")
+        DEFAULT_CHAT_FRAME:AddMessage("|cff00ccffNote:|r * = class spell (not a companion mount)")
     end
 end
