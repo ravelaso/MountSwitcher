@@ -19,6 +19,9 @@ local function RegisterSlashCommands()
         msg = strtrim(strlower(msg or ""))
 
         if msg == "options" then
+            -- Debug: show what's available
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r MS.optionsFrame = " .. tostring(MS.optionsFrame))
+            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r MS table keys: optionsFrame=" .. tostring(MS.optionsFrame) .. ", flyDropdown=" .. tostring(MS.flyDropdown))
             if not MS.optionsFrame then
                 DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r Options frame not loaded.")
                 return
@@ -88,7 +91,9 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function()
+    print("|cff00ccff[MountSwitcher]|r PLAYER_LOGIN fired, MS.optionsFrame:", MS.optionsFrame)
     RegisterSlashCommands()
+    print("|cff00ccff[MountSwitcher]|r Slash commands registered")
     frame:UnregisterEvent("PLAYER_LOGIN")
 end)
 

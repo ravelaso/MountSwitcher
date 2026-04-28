@@ -3,8 +3,7 @@
 
 local _, MS = ...
 
--- Forward-declare optionsFrame so the menu can reference it
-MS.optionsFrame = nil
+-- MS.optionsFrame is created in MS_Options.lua, which loads before this file
 
 -- ============================================================
 -- RIGHT-CLICK CONTEXT MENU
