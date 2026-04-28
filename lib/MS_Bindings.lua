@@ -19,13 +19,6 @@ local function RegisterSlashCommands()
         msg = strtrim(strlower(msg or ""))
 
         if msg == "options" then
-            -- Debug: show what's available
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r MS.optionsFrame = " .. tostring(MS.optionsFrame))
-            DEFAULT_CHAT_FRAME:AddMessage("|cff00ccff[MountSwitcher]|r MS table keys: optionsFrame=" .. tostring(MS.optionsFrame) .. ", flyDropdown=" .. tostring(MS.flyDropdown))
-            if not MS.optionsFrame then
-                DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r Options frame not loaded.")
-                return
-            end
             if MS.optionsFrame:IsShown() then 
                 MS.optionsFrame:Hide() 
             else 

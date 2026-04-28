@@ -3,8 +3,6 @@
 
 local _, MS = ...
 
-print("|cff00ccff[MountSwitcher]|r MS_Options.lua loading... MS:", MS)
-
 -- ============================================================
 -- OPTIONS FRAME
 -- ============================================================
@@ -231,4 +229,3 @@ optionsFrame.Show = function(self)
 end
 
 MS:Debug("Options module loaded")
-print("|cff00ccff[MountSwitcher]|r Options module loaded")

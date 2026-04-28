@@ -14,28 +14,28 @@ jobs:
     strategy:
       matrix:
         include:
-          - toc_file: MountSwitcher.toc
-            output_name: MountSwitcher-WOTLK
+          - toc_file: MountSwitcher_WOTLK.toc
+            folder_name: MountSwitcher_WOTLK
             interface: "30300"
           - toc_file: MountSwitcher_Classic.toc
-            output_name: MountSwitcher-Classic
+            folder_name: MountSwitcher_Classic
             interface: "40400"
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Prepare addon directory for ${{ matrix.output_name }}
+      - name: Prepare addon directory for ${{ matrix.folder_name }}
         run: |
-          # Create temp directory
-          mkdir -p "build/${{ matrix.output_name }}"
+          # Create temp directory with the correct folder name for WoW
+          mkdir -p "build/${{ matrix.folder_name }}"
           
           # Copy all files except .git, .github, and other non-addon files
           # Read the .toc file to know which files to include
           TOC_FILE="${{ matrix.toc_file }}"
           
-          # Copy the correct .toc and rename it to MountSwitcher.toc for WoW to load
-          cp "$TOC_FILE" "build/${{ matrix.output_name }}/MountSwitcher.toc"
+          # Copy the .toc with its correct name (WoW needs toc filename = folder name)
+          cp "$TOC_FILE" "build/${{ matrix.folder_name }}/$TOC_FILE"
           
           # Parse .toc file and copy all referenced files
           # Note: .toc files use Windows backslashes, need to convert to forward slashes for Linux
@@ -53,8 +53,8 @@ jobs:
             if [ -f "$line_normalized" ]; then
               # Create directory structure if needed
               dir=$(dirname "$line_normalized")
-              mkdir -p "build/${{ matrix.output_name }}/$dir"
-              cp "$line_normalized" "build/${{ matrix.output_name }}/$line_normalized"
+              mkdir -p "build/${{ matrix.folder_name }}/$dir"
+              cp "$line_normalized" "build/${{ matrix.folder_name }}/$line_normalized"
               echo "Copied: $line_normalized"
             else
               echo "Warning: File not found: $line_normalized (original: $line)"
@@ -63,37 +63,35 @@ jobs:
           
           # Also copy Bindings.xml if referenced
           if grep -q "Bindings.xml" "$TOC_FILE"; then
-            cp Bindings.xml "build/${{ matrix.output_name }}/Bindings.xml"
+            cp Bindings.xml "build/${{ matrix.folder_name }}/Bindings.xml"
           fi
           
           # Copy MountSwitcher.xml if referenced
           if grep -q "MountSwitcher.xml" "$TOC_FILE"; then
-            cp MountSwitcher.xml "build/${{ matrix.output_name }}/MountSwitcher.xml"
+            cp MountSwitcher.xml "build/${{ matrix.folder_name }}/MountSwitcher.xml"
           fi
           
-          # Copy MountSwitcher.lua (the stub loader)
-          cp MountSwitcher.lua "build/${{ matrix.output_name }}/MountSwitcher.lua"
-          
           echo "Contents of build directory:"
-          find "build/${{ matrix.output_name }}" -type f | sort
+          find "build/${{ matrix.folder_name }}" -type f | sort
       
-      - name: Create ZIP for ${{ matrix.output_name }}
+      - name: Create ZIP for ${{ matrix.folder_name }}
         run: |
           # Create zip from the build folder to preserve lib/ structure
-          # but exclude the parent folder (MountSwitcher-WOTLK/)
+          # The folder name inside must match the addon name for WoW
+          # Zip name matches folder name for consistency
           cd build
-          zip -r "${{ matrix.output_name }}.zip" "${{ matrix.output_name }}"
-          mv "${{ matrix.output_name }}.zip" ..
+          zip -r "${{ matrix.folder_name }}.zip" "${{ matrix.folder_name }}"
+          mv "${{ matrix.folder_name }}.zip" ..
           cd ..
           
           echo "=== ZIP contents ==="
-          unzip -l "${{ matrix.output_name }}.zip"
-       
-      - name: Upload artifact ${{ matrix.output_name }}
+          unzip -l "${{ matrix.folder_name }}.zip"
+        
+      - name: Upload artifact ${{ matrix.folder_name }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.output_name }}
-          path: ${{ matrix.output_name }}.zip
+          name: ${{ matrix.folder_name }}
+          path: ${{ matrix.folder_name }}.zip
   
   release:
     needs: build
