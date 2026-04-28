@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'  # Trigger on version tags like v1.5.0
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -76,16 +79,18 @@ jobs:
       
       - name: Create ZIP for ${{ matrix.output_name }}
         run: |
-          cd build
-          zip -r "${{ matrix.output_name }}.zip" "${{ matrix.output_name }}"
-          cd ..
-          mv "build/${{ matrix.output_name }}.zip" .
-      
+          # Create zip with files directly at root level (no nested folder)
+          cd "build/${{ matrix.output_name }}"
+          zip -r "../../${{ matrix.output_name }}.zip" .
+          cd ../..
+          echo "ZIP contents:"
+          unzip -l "${{ matrix.output_name }}.zip"
+       
       - name: Upload artifact ${{ matrix.output_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.output_name }}
-          path: ${{ matrix.output_name }}.zip
+          path: build/${{ matrix.output_name }}.zip
   
   release:
     needs: build
@@ -99,6 +104,13 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+       
+      - name: List downloaded files
+        run: |
+          echo "=== Files in artifacts directory ==="
+          find artifacts -type f -name "*.zip"
+          echo "=== Directory structure ==="
+          ls -la artifacts/
        
       - name: Create Release
         uses: softprops/action-gh-release@v2
