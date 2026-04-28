@@ -17,12 +17,14 @@ SlashCmdList["MountSwitcher"] = function(msg)
     msg = strtrim(strlower(msg or ""))
 
     if msg == "options" then
-        if MS.optionsFrame then
-            if MS.optionsFrame:IsShown() then 
-                MS.optionsFrame:Hide() 
-            else 
-                MS.optionsFrame:Show() 
-            end
+        if not MS.optionsFrame then
+            DEFAULT_CHAT_FRAME:AddMessage("|cffff4444[MountSwitcher]|r Options frame not loaded.")
+            return
+        end
+        if MS.optionsFrame:IsShown() then 
+            MS.optionsFrame:Hide() 
+        else 
+            MS.optionsFrame:Show() 
         end
 
     elseif msg == "lock" then
@@ -38,7 +40,7 @@ SlashCmdList["MountSwitcher"] = function(msg)
     elseif msg == "reload" then
         if InCombatLockdown() then return end
         if MS.MountDB and MS.MountDB.Rebuild then
-            MS.MountDB:Rebuild()
+            MS.MountDB:Rebuild()  -- Already correct
         end
         if MS.PopulateDropdowns then MS:PopulateDropdowns() end
         if MS.UpdateSecureButton then MS:UpdateSecureButton() end
@@ -49,7 +51,7 @@ SlashCmdList["MountSwitcher"] = function(msg)
         print("|cff00ccff[MountSwitcher]|r Debug:", MS.IsDebug and "ON" or "OFF")
         if MS.IsDebug then 
             if MS.MountDB and MS.MountDB.Rebuild then
-                MS.MountDB.Rebuild() 
+                MS.MountDB:Rebuild()  -- Use : to pass self
             end
             if MS.UpdateSecureButton then 
                 MS:UpdateSecureButton() 
