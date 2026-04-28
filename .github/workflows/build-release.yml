@@ -79,11 +79,12 @@ jobs:
       
       - name: Create ZIP for ${{ matrix.output_name }}
         run: |
-          # Create zip from inside the addon folder so files are at root level
-          # Using -j flag to junk (don't store) paths - flatten the structure
-          cd "build/${{ matrix.output_name }}"
-          zip -r -j "../../${{ matrix.output_name }}.zip" .
-          cd ../..
+          # Create zip from the build folder to preserve lib/ structure
+          # but exclude the parent folder (MountSwitcher-WOTLK/)
+          cd build
+          zip -r "${{ matrix.output_name }}.zip" "${{ matrix.output_name }}"
+          mv "${{ matrix.output_name }}.zip" ..
+          cd ..
           
           echo "=== ZIP contents ==="
           unzip -l "${{ matrix.output_name }}.zip"
