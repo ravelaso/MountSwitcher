@@ -79,19 +79,14 @@ jobs:
       
       - name: Create ZIP for ${{ matrix.output_name }}
         run: |
-          # Get absolute path
-          OUTPUT_DIR="$(pwd)/build/${{ matrix.output_name }}"
-          ZIP_PATH="$(pwd)/${{ matrix.output_name }}.zip"
-          
-          # Create zip with files directly at root level (no nested folder)
-          cd "$OUTPUT_DIR"
-          zip -r "$ZIP_PATH" .
+          # Create zip from inside the addon folder so files are at root level
+          # Using -j flag to junk (don't store) paths - flatten the structure
+          cd "build/${{ matrix.output_name }}"
+          zip -r -j "../../${{ matrix.output_name }}.zip" .
+          cd ../..
           
           echo "=== ZIP contents ==="
-          unzip -l "$ZIP_PATH"
-          echo ""
-          echo "=== ZIP file exists ==="
-          ls -la "$ZIP_PATH"
+          unzip -l "${{ matrix.output_name }}.zip"
        
       - name: Upload artifact ${{ matrix.output_name }}
         uses: actions/upload-artifact@v4
@@ -122,9 +117,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            MountSwitcher-WOTLK.zip
-            MountSwitcher-Classic.zip
+          files: artifacts/*.zip
           generate_release_notes: true
           draft: false
           prerelease: false
