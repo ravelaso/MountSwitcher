@@ -1,5 +1,5 @@
 ## Interface: 30300
-## Title: Mount Switcher
+## Title: Mount Switcher (WOTLK)
 ## Notes: Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 ## Author: @Ravelaso: Buenclima-Golemagg
 ## Version: 1.5.0
