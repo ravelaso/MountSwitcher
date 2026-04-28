@@ -33,7 +33,6 @@ MS.eventFrame = CreateFrame("Frame", "MountSwitcherEventFrame")
 MS.UpdateSecureButton = nil
 MS.RefreshHotkeyLabel = nil
 MS.PopulateDropdowns = nil
-MS.RebuildMountDatabase = nil
 MS.RestoreBarPosition = nil
 MS.SetBarLocked = nil
 
