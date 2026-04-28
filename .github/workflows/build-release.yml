@@ -79,18 +79,25 @@ jobs:
       
       - name: Create ZIP for ${{ matrix.output_name }}
         run: |
+          # Get absolute path
+          OUTPUT_DIR="$(pwd)/build/${{ matrix.output_name }}"
+          ZIP_PATH="$(pwd)/${{ matrix.output_name }}.zip"
+          
           # Create zip with files directly at root level (no nested folder)
-          cd "build/${{ matrix.output_name }}"
-          zip -r "../../${{ matrix.output_name }}.zip" .
-          cd ../..
-          echo "ZIP contents:"
-          unzip -l "${{ matrix.output_name }}.zip"
+          cd "$OUTPUT_DIR"
+          zip -r "$ZIP_PATH" .
+          
+          echo "=== ZIP contents ==="
+          unzip -l "$ZIP_PATH"
+          echo ""
+          echo "=== ZIP file exists ==="
+          ls -la "$ZIP_PATH"
        
       - name: Upload artifact ${{ matrix.output_name }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.output_name }}
-          path: build/${{ matrix.output_name }}.zip
+          path: ${{ matrix.output_name }}.zip
   
   release:
     needs: build
