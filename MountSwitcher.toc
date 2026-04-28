@@ -2,8 +2,19 @@
 ## Title: Mount Switcher
 ## Notes: Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 ## Author: @Ravelaso: Buenclima-Golemagg
-## Version: 1.4.1
+## Version: 1.5.0
 ## SavedVariablesPerCharacter: MountSwitcherDB
+
+# Key bindings (must be loaded early for WoW to register them)
 Bindings.xml
-MountSwitcher.xml
-MountSwitcher.lua
+
+# Load order matters - dependencies first
+lib\MS_Constants.lua
+lib\MS_Utils.lua
+lib\MS_Core.lua
+lib\MS_MountDB.lua
+lib\MS_UI.lua
+lib\MS_SecureButton.lua
+lib\MS_Options.lua
+lib\MS_ContextMenu.lua
+lib\MS_Bindings.lua
