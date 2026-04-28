@@ -30,10 +30,14 @@ function MS:RestoreBarPosition()
     end
 end
 
-local barLocked = true
+-- Initialize barLocked from saved DB or default to true (locked)
+MS.barLocked = MountSwitcherDB.BarLocked
+if MS.barLocked == nil then
+    MS.barLocked = true
+end
 
 function MS:SetBarLocked(locked)
-    barLocked = locked
+    MS.barLocked = locked
     MountSwitcherDB.BarLocked = locked
     if locked then
         barFrame:EnableMouse(false)
@@ -47,7 +51,7 @@ function MS:SetBarLocked(locked)
 end
 
 barFrame:SetScript("OnDragStart", function(self)
-    if not barLocked then self:StartMoving() end
+    if not MS.barLocked then self:StartMoving() end
 end)
 barFrame:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
