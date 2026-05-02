@@ -2,7 +2,7 @@
 ## Title: Mount Switcher (WOTLK)
 ## Notes: Switches your mounts depending on flying capabilities (fixes dalaran flying zone)
 ## Author: @Ravelaso: Buenclima
-## Version: 1.5.2
+## Version: 1.5.3
 ## SavedVariablesPerCharacter: MountSwitcherDB
 
 # Key bindings (must be loaded early for WoW to register them)

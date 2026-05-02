@@ -84,9 +84,9 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function()
-    print("|cff00ccff[MountSwitcher]|r PLAYER_LOGIN fired, MS.optionsFrame:", MS.optionsFrame)
+    MS:Debug("PLAYER_LOGIN fired, MS.optionsFrame:", MS.optionsFrame)
     RegisterSlashCommands()
-    print("|cff00ccff[MountSwitcher]|r Slash commands registered")
+    MS:Debug("Slash commands registered")
     frame:UnregisterEvent("PLAYER_LOGIN")
 end)
 
