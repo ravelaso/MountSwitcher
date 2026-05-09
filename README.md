@@ -1,5 +1,8 @@
 # MountSwitcher
 
+[![CurseForge](https://img.shields.io/badge/CurseForge-Available-F16436?style=for-the-badge&logo=curseforge&logoColor=white)](https://www.curseforge.com/wow/addons/mountswitcher)
+[![Warperia](https://img.shields.io/badge/Warperia-Available-8B5CF6?style=for-the-badge)](https://warperia.com/addon-wotlk/mountswitcher/)
+
 A World of Warcraft addon for WOTLK 3.3.5 and Classic Era that automatically switches between your flying and ground mounts based on the zone you're in.
 
 ## Features
